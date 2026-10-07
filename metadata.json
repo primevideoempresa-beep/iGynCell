@@ -1,0 +1,6 @@
+{
+  "name": "iGyn Cell - Gestão Empresarial e Assistência Técnica",
+  "description": "Sistema completo de gestão empresarial e ordens de serviço para iGyn Cell: assistência técnica, vendas, estoque, finanças e controle de colaboradores com sincronização em tempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
