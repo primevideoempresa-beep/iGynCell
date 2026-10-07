@@ -9,6 +9,17 @@
     font-family: 'JetBrains Mono', monospace;
     font-variant-numeric: tabular-nums;
   }
+
+  img {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* Ensure modals are scrollable on small screens */
+.modal-container {
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 /* Custom modern scrollbar */
@@ -112,7 +123,12 @@
 
   gap: 90px;
   align-items: center;
-  zoom: 0.67;
+}
+
+@media (min-width: 1024px) {
+  .login-container {
+    zoom: 0.67;
+  }
 }
 
 .brand-section {
