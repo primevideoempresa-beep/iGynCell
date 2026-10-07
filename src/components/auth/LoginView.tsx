@@ -15,7 +15,8 @@ import {
   ShieldAlert,
   ArrowLeft,
   Eye,
-  EyeOff
+  EyeOff,
+  Apple
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
@@ -106,7 +107,7 @@ export const LoginView: React.FC = () => {
         <div className="brand-section">
           <div className="brand-header">
             <div className="brand-icon">
-              <span>▯</span>
+              <Apple className="text-white h-10 w-10" />
             </div>
 
             <div>

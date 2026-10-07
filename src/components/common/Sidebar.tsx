@@ -143,8 +143,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
       <div className="space-y-6">
         {/* Brand Header */}
         <div className="flex items-center gap-3 px-2 pt-2">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-950">
-            <Smartphone className="h-5 w-5" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg overflow-hidden bg-white shadow-lg shadow-cyan-950">
+            <img src="/igyn cell.jpg" alt="iGyn Cell" className="w-full h-full object-cover" />
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5">

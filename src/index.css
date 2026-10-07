@@ -150,13 +150,8 @@
   justify-content: center;
 
   border-radius: 18px;
-
-  background:
-    linear-gradient(
-      145deg,
-      #079cf0,
-      #0564e9
-    );
+  overflow: hidden;
+  background: white;
 
   box-shadow:
     0 15px 45px rgba(0, 119, 255, 0.3);
