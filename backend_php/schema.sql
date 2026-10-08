@@ -24,10 +24,12 @@ CREATE TABLE `store_settings` (
   `defaultSaleCommission` DECIMAL(5,2) DEFAULT 5.00,
   `defaultTechCommission` DECIMAL(5,2) DEFAULT 15.00,
   `whatsappGreetingTemplate` TEXT,
+  `require2FAForAll` TINYINT(1) DEFAULT 1,
+  `twoFactorSessionDurationHours` INT DEFAULT 8,
   `updatedAt` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `store_settings` (`id`, `storeName`, `tradeName`, `address`, `locationDetails`, `cityState`, `postalCode`, `phone`, `cnpj`, `warrantyTerms`, `defaultSaleCommission`, `defaultTechCommission`, `whatsappGreetingTemplate`)
+INSERT INTO `store_settings` (`id`, `storeName`, `tradeName`, `address`, `locationDetails`, `cityState`, `postalCode`, `phone`, `cnpj`, `warrantyTerms`, `defaultSaleCommission`, `defaultTechCommission`, `whatsappGreetingTemplate`, `require2FAForAll`, `twoFactorSessionDurationHours`)
 VALUES (
   1,
   'iGyn Cell Assistência & Acessórios',
@@ -41,7 +43,9 @@ VALUES (
   'Garantia legal de 90 dias conforme Artigo 26 do Código de Defesa do Consumidor (CDC) exclusivamente para a peça e serviço discriminados nesta O.S. A garantia fica automaticamente invalidada em casos de danos por queda, trincos no vidro/display, contato com líquidos, oxidação, selo de garantia rompido ou intervenção de terceiros.',
   5.00,
   15.00,
-  'Olá {cliente}! Aqui é da iGyn Cell Informamos que sua Ordem de Serviço #{os} está com o status: *{status}*. Valor: {valor}. Dúvidas? Estamos à disposição!'
+  'Olá {cliente}! Aqui é da iGyn Cell Informamos que sua Ordem de Serviço #{os} está com o status: *{status}*. Valor: {valor}. Dúvidas? Estamos à disposição!',
+  1,
+  8
 );
 
 -- ---------------------------------------------------------
@@ -62,20 +66,24 @@ CREATE TABLE `employees` (
   `commissionRateSales` DECIMAL(5,2) DEFAULT 0.00,
   `commissionRateTech` DECIMAL(5,2) DEFAULT 0.00,
   `allowedTabs` JSON,
-  `twoFactorEnabled` TINYINT(1) DEFAULT 0,
-  `twoFactorSecret` VARCHAR(64) DEFAULT NULL,
+  `twoFactorEnabled` TINYINT(1) DEFAULT 1,
+  `twoFactorSecret` VARCHAR(64) DEFAULT 'JBSWY3DPEHPK3PXP',
+  `twoFactorActivatedAt` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `twoFactorSessionExpiresAt` DATETIME DEFAULT NULL,
+  `twoFactorLastVerifiedAt` DATETIME DEFAULT NULL,
+  `twoFactorBackupCodes` JSON DEFAULT NULL,
   `failedLoginAttempts` INT DEFAULT 0,
   `lockoutUntil` DATETIME DEFAULT NULL,
   `createdAt` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `lastLogin` DATETIME DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `employees` (`id`, `name`, `email`, `password`, `passwordHash`, `role`, `roleLabel`, `avatar`, `phone`, `status`, `commissionRateSales`, `commissionRateTech`, `allowedTabs`, `twoFactorEnabled`, `createdAt`)
+INSERT INTO `employees` (`id`, `name`, `email`, `password`, `passwordHash`, `role`, `roleLabel`, `avatar`, `phone`, `status`, `commissionRateSales`, `commissionRateTech`, `allowedTabs`, `twoFactorEnabled`, `twoFactorSecret`, `twoFactorBackupCodes`, `createdAt`)
 VALUES
-('emp-1', 'Rodrigo Silva (Admin)', 'admin@igyncell.com', 'admin', '$2y$12$e8w.R6aBf2XqVlm0uDsmG.L2Ece9F8y5zV.nKqvj9i2m9cE0uYqGy', 'admin', 'Administrador Geral', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80', '(73) 99911-2233', 'active', 5.00, 15.00, '["dashboard","employees","orders","sales","inventory","parts","clients","financial","commissions","notifications","audit","settings"]', 1, NOW()),
-('emp-2', 'Mariana Oliveira', 'mariana@igyncell.com', '123456', '$2y$12$e8w.R6aBf2XqVlm0uDsmG.L2Ece9F8y5zV.nKqvj9i2m9cE0uYqGy', 'manager', 'Gerente de Loja', 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80', '(73) 99922-3344', 'active', 6.00, 0.00, '["dashboard","orders","sales","inventory","parts","clients","financial","commissions","notifications","audit"]', 0, NOW()),
-('emp-3', 'Lucas Santos', 'lucas@igyncell.com', '123456', '$2y$12$e8w.R6aBf2XqVlm0uDsmG.L2Ece9F8y5zV.nKqvj9i2m9cE0uYqGy', 'technician', 'Técnico Especialista Apple/Android', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', '(73) 99933-4455', 'active', 0.00, 15.00, '["dashboard","orders","parts","clients","notifications"]', 0, NOW()),
-('emp-4', 'Beatriz Lima', 'beatriz@igyncell.com', '123456', '$2y$12$e8w.R6aBf2XqVlm0uDsmG.L2Ece9F8y5zV.nKqvj9i2m9cE0uYqGy', 'seller', 'Vendedora & Atendimento', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80', '(73) 99944-5566', 'active', 5.00, 0.00, '["dashboard","sales","inventory","clients","notifications"]', 0, NOW());
+('emp-1', 'Rodrigo Silva (Admin)', 'admin@igyncell.com', 'admin', '$2y$12$e8w.R6aBf2XqVlm0uDsmG.L2Ece9F8y5zV.nKqvj9i2m9cE0uYqGy', 'admin', 'Administrador Geral', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80', '(73) 99911-2233', 'active', 5.00, 15.00, '["dashboard","employees","orders","sales","inventory","parts","clients","financial","commissions","notifications","audit","settings"]', 1, 'JBSWY3DPEHPK3PXP', '["8492-1204","3910-4821","7519-9023","6102-4418"]', NOW()),
+('emp-2', 'Mariana Oliveira', 'mariana@igyncell.com', '123456', '$2y$12$e8w.R6aBf2XqVlm0uDsmG.L2Ece9F8y5zV.nKqvj9i2m9cE0uYqGy', 'manager', 'Gerente de Loja', 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80', '(73) 99922-3344', 'active', 6.00, 0.00, '["dashboard","orders","sales","inventory","parts","clients","financial","commissions","notifications","audit"]', 1, 'KRSXG5CTMVRXEZLU', '["9124-7731","4481-2093","8823-1104","3590-6712"]', NOW()),
+('emp-3', 'Lucas Santos', 'lucas@igyncell.com', '123456', '$2y$12$e8w.R6aBf2XqVlm0uDsmG.L2Ece9F8y5zV.nKqvj9i2m9cE0uYqGy', 'technician', 'Técnico Especialista Apple/Android', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', '(73) 99933-4455', 'active', 0.00, 15.00, '["dashboard","orders","parts","clients","notifications"]', 1, 'MZXW6YTBOI======', '["1948-2839","5021-9934","7714-3829","6201-5582"]', NOW()),
+('emp-4', 'Beatriz Lima', 'beatriz@igyncell.com', '123456', '$2y$12$e8w.R6aBf2XqVlm0uDsmG.L2Ece9F8y5zV.nKqvj9i2m9cE0uYqGy', 'seller', 'Vendedora & Atendimento', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80', '(73) 99944-5566', 'active', 5.00, 0.00, '["dashboard","sales","inventory","clients","notifications"]', 1, 'OB2HK4DFEBSXG43U', '["3391-4420","8102-5591","2489-7013","6921-8840"]', NOW());
 
 -- ---------------------------------------------------------
 -- Tabela: Clientes (Clients)

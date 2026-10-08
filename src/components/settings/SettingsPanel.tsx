@@ -20,7 +20,8 @@ import {
   ExternalLink,
   Save,
   Lock,
-  QrCode
+  QrCode,
+  Clock
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -48,7 +49,16 @@ export const SettingsPanel: React.FC = () => {
     syncWithDatabase,
     isSyncing
   } = useApp();
-  const { currentUser, isRole, setup2FA, confirm2FA, disable2FA } = useAuth();
+  const {
+    currentUser,
+    isRole,
+    setup2FA,
+    confirm2FA,
+    disable2FA,
+    twoFactorSessionExpiresAt,
+    twoFactorRemainingSeconds,
+    forceReauthAll
+  } = useAuth();
 
   // Get current user data from employees list to have fresh 2FA status
   const userData = employees.find(e => e.id === currentUser?.id) || currentUser;
@@ -65,6 +75,12 @@ export const SettingsPanel: React.FC = () => {
   const [defaultSaleCommission, setDefaultSaleCommission] = useState(settings.defaultSaleCommission);
   const [defaultTechCommission, setDefaultTechCommission] = useState(settings.defaultTechCommission);
   const [whatsappGreetingTemplate, setWhatsappGreetingTemplate] = useState(settings.whatsappGreetingTemplate);
+
+  // Global 2FA Policy State
+  const [require2FAForAll, setRequire2FAForAll] = useState(settings.require2FAForAll ?? true);
+  const [twoFactorSessionDurationHours, setTwoFactorSessionDurationHours] = useState(settings.twoFactorSessionDurationHours || 8);
+  const [selectedEmp2FA, setSelectedEmp2FA] = useState<any | null>(null);
+  const [reauthSuccessMsg, setReauthSuccessMsg] = useState('');
 
   // PHP/MySQL Backend Config State
   const [apiUrlInput, setApiUrlInput] = useState(phpApiUrl);
@@ -143,7 +159,9 @@ export const SettingsPanel: React.FC = () => {
       warrantyTerms,
       defaultSaleCommission,
       defaultTechCommission,
-      whatsappGreetingTemplate
+      whatsappGreetingTemplate,
+      require2FAForAll,
+      twoFactorSessionDurationHours
     });
     setPhpApiUrl(apiUrlInput);
     setSavedSuccess(true);
@@ -558,120 +576,270 @@ export const SettingsPanel: React.FC = () => {
           </div>
         </div>
 
-        {/* Security / 2FA Section */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="rounded-xl bg-rose-500/20 border border-rose-500/40 p-2 text-rose-400">
-                <Lock className="h-5 w-5" />
+        {/* Security / 2FA Section: Enforced for ALL Employees */}
+        <div className="rounded-2xl border border-emerald-500/30 bg-slate-900/80 p-5 sm:p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-emerald-500/20 border border-emerald-500/40 p-2.5 text-emerald-400">
+                <ShieldCheck className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Segurança & Autenticação de Dois Fatores (2FA)</h3>
-                <p className="text-2xs text-slate-400">Proteja seu acesso usando aplicativos como Google Authenticator ou Authy.</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    Política Global: 2FA Obrigatório para Todos os Funcionários
+                  </h3>
+                  <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-3xs font-mono font-bold text-emerald-300">
+                    100% PROTEGIDO
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Proteção de dois fatores ativa para todos os cargos (Proprietário, Gerente, Vendedores e Técnicos).
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              {userData?.twoFactorEnabled ? (
-                <div className="flex flex-col items-end">
-                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-xs font-bold text-emerald-400 mb-2">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    2FA ATIVADO
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleDisable2FA}
-                    className="text-[10px] font-bold text-rose-400 hover:text-rose-300 underline underline-offset-4"
-                  >
-                    Desativar Proteção
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col items-end">
-                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-xs font-bold text-rose-400 mb-2">
-                    <AlertCircle className="h-3.5 w-3.5" />
-                    2FA DESATIVADO
-                  </span>
-                  {!isSettingUp2FA && (
-                    <button
-                      type="button"
-                      onClick={handleStartSetup2FA}
-                      className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-bold text-white hover:bg-cyan-500 transition shadow-lg shadow-cyan-950/40"
-                    >
-                      Ativar 2FA Agora
-                    </button>
-                  )}
-                </div>
-              )}
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 cursor-pointer bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
+                <input
+                  type="checkbox"
+                  checked={require2FAForAll}
+                  onChange={e => setRequire2FAForAll(e.target.checked)}
+                  className="rounded text-cyan-500 focus:ring-0"
+                />
+                <span className="font-semibold text-slate-200">Exigir 2FA para Todos</span>
+              </label>
             </div>
           </div>
 
-          {isSettingUp2FA && !userData?.twoFactorEnabled && (
-            <div className="mt-4 bg-slate-950/80 p-6 rounded-2xl border border-cyan-500/30 space-y-6 animate-in slide-in-from-top-2 duration-300">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                <div className="flex flex-col items-center space-y-3">
-                  <div className="bg-white p-3 rounded-2xl shadow-2xl">
-                    <QRCodeSVG value={qrCodeUri} size={160} level="H" />
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-medium">Escaneie com seu App de Autenticação</p>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-bold text-white flex items-center gap-2">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 text-[10px] text-slate-950">1</span>
-                      Configuração Manual
-                    </h4>
-                    <p className="text-2xs text-slate-400 leading-relaxed">
-                      Se não puder escanear, insira esta chave manualmente no seu aplicativo:
-                    </p>
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 font-mono text-sm text-cyan-400 font-bold tracking-[0.2em] text-center shadow-inner">
-                      {twoFactorSecret}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 pt-2">
-                    <h4 className="text-xs font-bold text-white flex items-center gap-2">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 text-[10px] text-slate-950">2</span>
-                      Confirme o Código
-                    </h4>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="text"
-                        maxLength={6}
-                        value={confirmationCode}
-                        onChange={e => setConfirmationCode(e.target.value.replace(/\D/g, ''))}
-                        placeholder="000 000"
-                        className="flex-1 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-base font-mono font-bold tracking-[0.4em] text-center text-white outline-none focus:border-cyan-500"
-                      />
-                      <button
-                        type="button"
-                        disabled={confirmationCode.length < 6 || isConfirming2FA}
-                        onClick={handleConfirmActivation}
-                        className="rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition disabled:opacity-40 shadow-lg shadow-emerald-950/20"
-                      >
-                        {isConfirming2FA ? 'Validando...' : 'Ativar'}
-                      </button>
-                    </div>
-                    {twoFactorError && (
-                      <p className="text-2xs font-bold text-rose-400 bg-rose-400/10 px-3 py-1.5 rounded-lg border border-rose-400/20">{twoFactorError}</p>
-                    )}
-                  </div>
-                </div>
+          {/* Configuração "Até quando funciona" - Duração da Sessão 2FA */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-cyan-400" />
+                  <span>Até quando funciona a sessão 2FA (Validade da Autenticação)</span>
+                </h4>
+                <p className="text-2xs text-slate-400 mt-0.5">
+                  Define por quanto tempo o funcionário permanece autenticado antes de precisar reinserir o código de 6 dígitos.
+                </p>
               </div>
-              
-              <div className="flex justify-end pt-2">
+
+              <span className="font-mono text-xs font-bold text-cyan-300 bg-cyan-950/60 border border-cyan-800/40 px-3 py-1 rounded-lg">
+                Válido por {twoFactorSessionDurationHours} horas
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+              {[
+                { hours: 4, label: '4 horas' },
+                { hours: 8, label: '8h (Turno)' },
+                { hours: 12, label: '12 horas' },
+                { hours: 24, label: '24 horas' },
+                { hours: 168, label: '7 dias' },
+                { hours: 720, label: '30 dias' }
+              ].map(opt => (
+                <button
+                  key={opt.hours}
+                  type="button"
+                  onClick={() => setTwoFactorSessionDurationHours(opt.hours)}
+                  className={`py-2 px-2.5 rounded-xl text-xs font-bold transition text-center border ${
+                    twoFactorSessionDurationHours === opt.hours
+                      ? 'border-cyan-500 bg-cyan-500/20 text-cyan-300 shadow-sm shadow-cyan-950'
+                      : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Current user session feedback */}
+            <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-2xs">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400">Sua sessão atual funciona até:</span>
+                <span className="font-mono font-bold text-emerald-400">
+                  {twoFactorSessionExpiresAt ? new Date(twoFactorSessionExpiresAt).toLocaleString('pt-BR') : 'Ativa'}
+                </span>
+                {twoFactorRemainingSeconds > 0 && (
+                  <span className="text-cyan-300 font-mono">
+                    (Restam {Math.floor(twoFactorRemainingSeconds / 3600)}h {Math.floor((twoFactorRemainingSeconds % 3600) / 60)}m)
+                  </span>
+                )}
+              </div>
+
+              {isRole(['admin', 'manager']) && (
                 <button
                   type="button"
-                  onClick={() => setIsSettingUp2FA(false)}
-                  className="text-2xs font-bold text-slate-500 hover:text-white transition"
+                  onClick={async () => {
+                    if (confirm('Deseja forçar reautenticação 2FA para todos os funcionários agora? As sessões serão invalidadas imediatamente.')) {
+                      await forceReauthAll();
+                      setReauthSuccessMsg('Sessões 2FA invalidadas com sucesso!');
+                      setTimeout(() => setReauthSuccessMsg(''), 3000);
+                    }
+                  }}
+                  className="text-2xs font-semibold text-rose-400 hover:text-rose-300 underline underline-offset-2"
                 >
-                  Cancelar Setup
+                  Forçar Reautenticação Geral
+                </button>
+              )}
+            </div>
+            {reauthSuccessMsg && (
+              <p className="text-2xs font-bold text-rose-400 bg-rose-400/10 p-2 rounded-lg border border-rose-400/20">
+                {reauthSuccessMsg}
+              </p>
+            )}
+          </div>
+
+          {/* Lista de Auditoria de 2FA de Todos os Funcionários */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center justify-between">
+              <span>Status de 2FA por Colaborador ({employees.length} de {employees.length})</span>
+              <span className="text-2xs text-emerald-400 font-normal">Todos protegidos</span>
+            </h4>
+
+            <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950/60">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-2xs">
+                  <thead className="bg-slate-900/90 text-slate-400 border-b border-slate-800">
+                    <tr>
+                      <th className="py-2.5 px-3">Colaborador</th>
+                      <th className="py-2.5 px-3">Cargo</th>
+                      <th className="py-2.5 px-3">Status 2FA</th>
+                      <th className="py-2.5 px-3">Sessão Válida Até (Até quando funciona)</th>
+                      <th className="py-2.5 px-3 text-right">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                    {employees.map(emp => {
+                      const expiryFormatted = emp.twoFactorSessionExpiresAt
+                        ? new Date(emp.twoFactorSessionExpiresAt).toLocaleString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
+                        : 'Ativo c/ Login';
+
+                      return (
+                        <tr key={emp.id} className="hover:bg-slate-900/40 transition">
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={emp.avatar}
+                                alt={emp.name}
+                                className="h-6 w-6 rounded-full object-cover border border-slate-700"
+                              />
+                              <div>
+                                <strong className="text-white block">{emp.name}</strong>
+                                <span className="text-3xs text-slate-400">{emp.email}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 font-medium text-slate-300">
+                            {emp.roleLabel}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-3xs border border-emerald-500/30">
+                              <CheckCircle2 className="h-3 w-3" />
+                              2FA ATIVO
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-cyan-300 font-semibold">
+                            {expiryFormatted}
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedEmp2FA(emp)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 border border-cyan-500/30 font-bold transition text-3xs"
+                            >
+                              <QrCode className="h-3 w-3" />
+                              <span>Ver QR Code / Chave</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal para Visualização de Chaves 2FA do Colaborador */}
+        {selectedEmp2FA && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+            <div className="w-full max-w-lg rounded-2xl border border-cyan-500/30 bg-slate-900 p-6 space-y-5 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">Chaves de 2FA do Colaborador</h4>
+                    <p className="text-2xs text-slate-400">{selectedEmp2FA.name} • {selectedEmp2FA.roleLabel}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedEmp2FA(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-white space-y-2">
+                  <QRCodeSVG
+                    value={`otpauth://totp/iGynCell:${encodeURIComponent(selectedEmp2FA.email)}?secret=${selectedEmp2FA.twoFactorSecret || 'JBSWY3DPEHPK3PXP'}&issuer=iGynCell`}
+                    size={140}
+                    level="H"
+                  />
+                  <span className="text-3xs text-slate-600 font-medium">Google Authenticator / Authy</span>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <span className="text-2xs text-slate-400 block mb-1">Chave Secreta (Base32):</span>
+                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-2 font-mono text-cyan-400 font-bold text-center tracking-widest text-xs select-all">
+                      {selectedEmp2FA.twoFactorSecret || 'JBSWY3DPEHPK3PXP'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-2xs text-slate-400 block mb-1">Validade da Sessão ("Até quando funciona"):</span>
+                    <div className="rounded-lg bg-slate-950 border border-slate-800 p-2 text-2xs font-mono text-emerald-400">
+                      {selectedEmp2FA.twoFactorSessionExpiresAt ? new Date(selectedEmp2FA.twoFactorSessionExpiresAt).toLocaleString('pt-BR') : 'Ativa c/ Login'}
+                    </div>
+                  </div>
+
+                  {selectedEmp2FA.twoFactorBackupCodes && selectedEmp2FA.twoFactorBackupCodes.length > 0 && (
+                    <div>
+                      <span className="text-2xs text-slate-400 block mb-1">Códigos Reserva de Emergência:</span>
+                      <div className="grid grid-cols-2 gap-1 bg-slate-950 border border-slate-800 p-2 rounded-lg font-mono text-3xs text-amber-300">
+                        {selectedEmp2FA.twoFactorBackupCodes.map((c: string, idx: number) => (
+                          <span key={idx} className="bg-slate-900 px-1.5 py-0.5 rounded text-center">{c}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSelectedEmp2FA(null)}
+                  className="rounded-lg bg-cyan-600 px-5 py-2 text-xs font-bold text-white hover:bg-cyan-500 transition"
+                >
+                  Fechar
                 </button>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Submit */}
         <div className="flex items-center justify-end">

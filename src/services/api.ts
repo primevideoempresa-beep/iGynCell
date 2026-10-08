@@ -303,7 +303,15 @@ export const apiDeleteOrder = async (id: string): Promise<{ success: boolean; er
 /**
  * Solicita configuração de 2FA (gera secret e QR Code)
  */
-export const apiSetup2FA = async (userId: string): Promise<{ success: boolean; secret?: string; qrCodeUri?: string; error?: string }> => {
+export const apiSetup2FA = async (userId: string): Promise<{
+  success: boolean;
+  secret?: string;
+  qrCodeUri?: string;
+  backupCodes?: string[];
+  employeeName?: string;
+  employeeEmail?: string;
+  error?: string;
+}> => {
   const baseUrl = getApiBaseUrl();
   const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
     ? `${baseUrl}/auth.php?action=setup_2fa&userId=${encodeURIComponent(userId)}`
@@ -320,7 +328,7 @@ export const apiSetup2FA = async (userId: string): Promise<{ success: boolean; s
 /**
  * Confirma e ativa o 2FA com o código digitado
  */
-export const apiConfirm2FA = async (userId: string, secret: string, code: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+export const apiConfirm2FA = async (userId: string, secret: string, code: string): Promise<{ success: boolean; message?: string; twoFactorSessionExpiresAt?: string; backupCodes?: string[]; error?: string }> => {
   const baseUrl = getApiBaseUrl();
   const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
     ? `${baseUrl}/auth.php?action=confirm_2fa`
@@ -346,6 +354,85 @@ export const apiDisable2FA = async (userId: string): Promise<{ success: boolean;
   const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
     ? `${baseUrl}/auth.php?action=disable_2fa`
     : `${baseUrl}/auth/disable-2fa`;
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ userId })
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Renova a sessão de 2FA ("Até quando funciona")
+ */
+export const apiRenew2FA = async (userId: string, code: string): Promise<{ success: boolean; message?: string; twoFactorSessionExpiresAt?: string; error?: string }> => {
+  const baseUrl = getApiBaseUrl();
+  const endpoint = `${baseUrl}/auth/renew-2fa`;
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ userId, code })
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Força reautenticação 2FA imediata para todos os funcionários
+ */
+export const apiForceReauthAll = async (): Promise<{ success: boolean; message?: string; error?: string }> => {
+  const baseUrl = getApiBaseUrl();
+  const endpoint = `${baseUrl}/auth/force-reauth-all`;
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Obtém status e validade da sessão 2FA ("Até quando funciona")
+ */
+export const apiGetSessionStatus = async (userId: string): Promise<{
+  twoFactorEnabled?: boolean;
+  isValid?: boolean;
+  expiresAt?: string;
+  remainingSeconds?: number;
+  remainingHoursFormatted?: string;
+  lastVerifiedAt?: string;
+  error?: string;
+}> => {
+  const baseUrl = getApiBaseUrl();
+  const endpoint = `${baseUrl}/auth/session-status/${userId}`;
+
+  try {
+    const res = await fetch(endpoint, { headers: { 'Accept': 'application/json' } });
+    return await res.json();
+  } catch (err: any) {
+    return { error: err.message };
+  }
+};
+
+/**
+ * Regenera códigos de backup de emergência para o colaborador
+ */
+export const apiRegenerateBackupCodes = async (userId: string): Promise<{ success: boolean; backupCodes?: string[]; error?: string }> => {
+  const baseUrl = getApiBaseUrl();
+  const endpoint = `${baseUrl}/auth/regenerate-backup-codes`;
 
   try {
     const res = await fetch(endpoint, {

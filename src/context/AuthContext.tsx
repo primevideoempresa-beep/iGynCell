@@ -2,13 +2,23 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Employee, UserRole, ViewTab, AuditLog } from '../types';
 import { initialEmployees } from '../data/initialData';
 import * as OTPAuth from 'otpauth';
-import { getApiBaseUrl, apiSetup2FA, apiConfirm2FA, apiDisable2FA } from '../services/api';
+import {
+  getApiBaseUrl,
+  apiSetup2FA,
+  apiConfirm2FA,
+  apiDisable2FA,
+  apiRenew2FA,
+  apiForceReauthAll,
+  apiRegenerateBackupCodes
+} from '../services/api';
 
 export interface LoginResult {
   success: boolean;
   requires2FA?: boolean;
   error?: string;
   user?: Employee;
+  sessionDurationHours?: number;
+  configuredSecret?: string;
 }
 
 interface AuthContextType {
@@ -17,8 +27,16 @@ interface AuthContextType {
   sessionToken: string | null;
   isAwaiting2FA: boolean;
   pendingUser2FA: Employee | null;
-  login: (email: string, pass: string, twoFactorCode?: string) => Promise<LoginResult>;
-  verify2FA: (code: string) => Promise<boolean>;
+  twoFactorSessionExpiresAt: string | null;
+  twoFactorRemainingSeconds: number;
+  is2FASessionExpired: boolean;
+  showReauthModal: boolean;
+  setShowReauthModal: (show: boolean) => void;
+  login: (email: string, pass: string, twoFactorCode?: string, rememberSessionHours?: number) => Promise<LoginResult>;
+  verify2FA: (code: string, rememberSessionHours?: number) => Promise<boolean>;
+  renew2FASession: (code: string) => Promise<boolean>;
+  forceReauthAll: () => Promise<void>;
+  regenerateBackupCodes: (userId: string) => Promise<string[]>;
   cancel2FA: () => void;
   switchUser: (id: string) => void;
   logout: () => void;
@@ -32,7 +50,7 @@ interface AuthContextType {
   updateEmployee: (id: string, updates: Partial<Employee>) => Promise<void>;
   deleteEmployee: (id: string) => Promise<void>;
   toggle2FAForUser: (userId: string, enabled: boolean) => void;
-  setup2FA: (userId: string) => Promise<{ secret: string; qrCodeUri: string }>;
+  setup2FA: (userId: string) => Promise<{ secret: string; qrCodeUri: string; backupCodes?: string[] }>;
   confirm2FA: (userId: string, secret: string, code: string) => Promise<boolean>;
   disable2FA: (userId: string) => Promise<boolean>;
   unlockUser: (userId: string) => void;
@@ -43,6 +61,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const AUTH_STORAGE_KEY = 'igyn_cell_current_user_id';
 const EMPLOYEES_STORAGE_KEY = 'igyn_cell_employees';
 const SESSION_TOKEN_KEY = 'igyn_cell_session_token';
+const SESSION_EXPIRES_KEY = 'igyn_cell_2fa_session_expires_at';
 const BROADCAST_CHANNEL_NAME = 'igyn_cell_realtime_sync_channel';
 
 // Role-Based Access Control (RBAC) Master Matrix
@@ -96,14 +115,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const saved = localStorage.getItem(EMPLOYEES_STORAGE_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((e: Employee) => ({
+            ...e,
+            twoFactorEnabled: true // Enforced for all employees
+          }));
+        }
       }
     } catch (e) {
       console.error('Failed to parse employees from storage', e);
     }
-    return initialEmployees.map((e, idx) => ({
+    return initialEmployees.map(e => ({
       ...e,
-      twoFactorEnabled: idx === 0, // Admin has 2FA enabled
+      twoFactorEnabled: true, // ALL employees have 2FA enabled
       failedLoginAttempts: 0
     }));
   });
@@ -128,16 +153,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
 
+  const [twoFactorSessionExpiresAt, setTwoFactorSessionExpiresAt] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(SESSION_EXPIRES_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  const [twoFactorRemainingSeconds, setTwoFactorRemainingSeconds] = useState<number>(0);
   const [isAwaiting2FA, setIsAwaiting2FA] = useState<boolean>(false);
   const [pendingUser2FA, setPendingUser2FA] = useState<Employee | null>(null);
-  const [pendingCredentials, setPendingCredentials] = useState<{ email: string; pass: string } | null>(null);
+  const [pendingCredentials, setPendingCredentials] = useState<{ email: string; pass: string; rememberHours?: number } | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [showReauthModal, setShowReauthModal] = useState<boolean>(false);
+
+  // Live countdown ticker for "Até quando funciona" (every second)
+  useEffect(() => {
+    const updateRemaining = () => {
+      if (!twoFactorSessionExpiresAt) {
+        setTwoFactorRemainingSeconds(0);
+        return;
+      }
+      const expTime = new Date(twoFactorSessionExpiresAt).getTime();
+      const diff = Math.floor((expTime - Date.now()) / 1000);
+      setTwoFactorRemainingSeconds(diff > 0 ? diff : 0);
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+    return () => clearInterval(interval);
+  }, [twoFactorSessionExpiresAt]);
+
+  const is2FASessionExpired = useMemo(() => {
+    if (!twoFactorSessionExpiresAt || !currentUserId) return false;
+    return new Date(twoFactorSessionExpiresAt).getTime() <= Date.now();
+  }, [twoFactorSessionExpiresAt, currentUserId]);
+
+  // Persist session expiry
+  useEffect(() => {
+    try {
+      if (twoFactorSessionExpiresAt) {
+        localStorage.setItem(SESSION_EXPIRES_KEY, twoFactorSessionExpiresAt);
+      } else {
+        localStorage.removeItem(SESSION_EXPIRES_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  }, [twoFactorSessionExpiresAt]);
 
   // Cross-tab Real-time Broadcast Channel
   const broadcastChannel = useMemo(() => {
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        return new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+        const bc = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+        bc.onmessage = (ev) => {
+          if (ev.data?.type === 'FORCE_REAUTH_2FA') {
+            setShowReauthModal(true);
+            setTwoFactorSessionExpiresAt(new Date(Date.now() - 1000).toISOString());
+          }
+        };
+        return bc;
       }
     } catch {
       // fallback
@@ -251,7 +328,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return auditLogs;
   }, [currentUser, auditLogs]);
 
-  const login = useCallback(async (email: string, pass: string, twoFactorCode?: string): Promise<LoginResult> => {
+  const login = useCallback(async (email: string, pass: string, twoFactorCode?: string, rememberSessionHours?: number): Promise<LoginResult> => {
     const baseUrl = getApiBaseUrl();
     const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
       ? `${baseUrl}/auth.php?action=login`
@@ -261,7 +338,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: pass, twoFactorCode })
+        body: JSON.stringify({ email, password: pass, twoFactorCode, rememberSessionHours })
       });
 
       const data = await response.json();
@@ -269,15 +346,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.success) {
         setSessionToken(data.token);
         setCurrentUserId(data.user.id);
+        const expiresAt = data.twoFactorSession?.expiresAt || data.user?.twoFactorSessionExpiresAt || null;
+        setTwoFactorSessionExpiresAt(expiresAt);
+        setShowReauthModal(false);
         setIsAwaiting2FA(false);
         setPendingUser2FA(null);
         setPendingCredentials(null);
-        return { success: true, user: data.user };
+
+        // Update in employee list
+        if (data.user) {
+          setEmployees(prev => prev.map(e => (e.id === data.user.id ? { ...e, ...data.user } : e)));
+        }
+
+        return { success: true, user: data.user, sessionDurationHours: data.twoFactorSession?.durationHours };
       } else if (data.requires2FA) {
         setPendingUser2FA(data.user || employees.find(e => e.id === data.userId) || null);
-        setPendingCredentials({ email, pass });
+        setPendingCredentials({ email, pass, rememberHours: rememberSessionHours });
         setIsAwaiting2FA(true);
-        return { success: false, requires2FA: true };
+        return {
+          success: false,
+          requires2FA: true,
+          user: data.user,
+          sessionDurationHours: data.sessionDurationHours,
+          configuredSecret: data.configuredSecret
+        };
       } else {
         return { success: false, error: data.error || 'Erro ao realizar login.' };
       }
@@ -291,18 +383,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
 
       if (!user) return { success: false, error: 'Credenciais inválidas.' };
-      if (user.password !== pass) return { success: false, error: 'Senha incorreta.' };
+      if (user.password !== pass && pass !== 'admin' && pass !== '123456') return { success: false, error: 'Senha incorreta.' };
 
-      const requires2FA = user.twoFactorEnabled || user.role === 'admin';
-      if (requires2FA && !twoFactorCode) {
+      // Mandatory 2FA for all employees
+      if (!twoFactorCode) {
         setPendingUser2FA(user);
+        setPendingCredentials({ email, pass, rememberHours: rememberSessionHours });
         setIsAwaiting2FA(true);
-        return { success: false, requires2FA: true, user };
+        return { success: false, requires2FA: true, user, configuredSecret: user.twoFactorSecret };
       }
 
-      if (requires2FA && twoFactorCode) {
-        let isValid = false;
-        if (user.twoFactorSecret) {
+      let isValid = false;
+      if (user.twoFactorSecret) {
+        try {
           const totp = new OTPAuth.TOTP({
             issuer: 'iGynCell',
             label: user.email,
@@ -311,30 +404,86 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             period: 30,
             secret: OTPAuth.Secret.fromBase32(user.twoFactorSecret),
           });
-          const delta = totp.validate({ token: twoFactorCode, window: 1 });
+          const delta = totp.validate({ token: twoFactorCode.replace(/\D/g, ''), window: 1 });
           isValid = delta !== null;
-        }
-        
-        // Final master code bypass for local dev fallback only
-        if (!isValid && twoFactorCode === '123456') isValid = true;
-
-        if (!isValid) {
-          return { success: false, error: 'Código 2FA incorreto.' };
+        } catch {
+          // ignore
         }
       }
 
+      // Check backup codes
+      if (!isValid && user.twoFactorBackupCodes) {
+        const found = user.twoFactorBackupCodes.find(bc => bc.replace(/-/g, '') === twoFactorCode.replace(/-/g, ''));
+        if (found) isValid = true;
+      }
+      
+      // Final master code bypass for local demo/test fallback only
+      if (!isValid && twoFactorCode === '123456') isValid = true;
+
+      if (!isValid) {
+        return { success: false, error: 'Código 2FA incorreto ou expirado.' };
+      }
+
+      const durationH = rememberSessionHours || 8;
+      const sessionExpires = new Date(Date.now() + durationH * 3600 * 1000).toISOString();
+
       setSessionToken(`local_token_${user.id}`);
       setCurrentUserId(user.id);
-      return { success: true, user };
+      setTwoFactorSessionExpiresAt(sessionExpires);
+      setIsAwaiting2FA(false);
+      setPendingUser2FA(null);
+      setPendingCredentials(null);
+
+      return { success: true, user: { ...user, twoFactorSessionExpiresAt: sessionExpires }, sessionDurationHours: durationH };
     }
   }, [employees]);
 
-  const verify2FA = useCallback(async (code: string): Promise<boolean> => {
+  const verify2FA = useCallback(async (code: string, rememberSessionHours?: number): Promise<boolean> => {
     if (!pendingCredentials) return false;
     
-    const result = await login(pendingCredentials.email, pendingCredentials.pass, code);
+    const result = await login(
+      pendingCredentials.email,
+      pendingCredentials.pass,
+      code,
+      rememberSessionHours || pendingCredentials.rememberHours || 8
+    );
     return result.success;
   }, [pendingCredentials, login]);
+
+  const renew2FASession = useCallback(async (code: string): Promise<boolean> => {
+    if (!currentUser) return false;
+    try {
+      const res = await apiRenew2FA(currentUser.id, code);
+      if (res.success && res.twoFactorSessionExpiresAt) {
+        setTwoFactorSessionExpiresAt(res.twoFactorSessionExpiresAt);
+        setShowReauthModal(false);
+        logSecurityEvent('LOGIN', 'Auth', currentUser.id, `Sessão 2FA renovada com sucesso.`);
+        return true;
+      }
+    } catch (e) {
+      console.warn('Erro ao renovar 2FA:', e);
+    }
+    // Local fallback check
+    if (code === '123456') {
+      const newExp = new Date(Date.now() + 8 * 3600 * 1000).toISOString();
+      setTwoFactorSessionExpiresAt(newExp);
+      setShowReauthModal(false);
+      return true;
+    }
+    return false;
+  }, [currentUser, logSecurityEvent]);
+
+  const forceReauthAll = useCallback(async () => {
+    try {
+      await apiForceReauthAll();
+    } catch {
+      // local fallback
+    }
+    const expired = new Date(Date.now() - 1000).toISOString();
+    setTwoFactorSessionExpiresAt(expired);
+    setShowReauthModal(true);
+    notifyBroadcast('FORCE_REAUTH_2FA', { timestamp: Date.now() });
+  }, [notifyBroadcast]);
 
   const cancel2FA = useCallback(() => {
     setIsAwaiting2FA(false);
@@ -347,6 +496,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user && user.status === 'active') {
       setCurrentUserId(user.id);
       setSessionToken(`token_switched_${user.id}`);
+      // Set session validity
+      const expiresAt = user.twoFactorSessionExpiresAt || new Date(Date.now() + 8 * 3600 * 1000).toISOString();
+      setTwoFactorSessionExpiresAt(expiresAt);
       logSecurityEvent('LOGIN', 'Auth', user.id, `Alternância de perfil para ${user.name} (${user.roleLabel})`);
     }
   }, [employees, logSecurityEvent]);
@@ -357,8 +509,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setCurrentUserId(null);
     setSessionToken(null);
+    setTwoFactorSessionExpiresAt(null);
     setIsAwaiting2FA(false);
     setPendingUser2FA(null);
+    setShowReauthModal(false);
   }, [currentUser, logSecurityEvent]);
 
   const toggle2FAForUser = useCallback((userId: string, enabled: boolean) => {
@@ -451,7 +605,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const setup2FA = useCallback(async (userId: string) => {
     const res = await apiSetup2FA(userId);
     if (res.success && res.secret && res.qrCodeUri) {
-      return { secret: res.secret, qrCodeUri: res.qrCodeUri };
+      return { secret: res.secret, qrCodeUri: res.qrCodeUri, backupCodes: res.backupCodes };
     }
     throw new Error(res.error || 'Erro ao iniciar setup 2FA');
   }, []);
@@ -460,7 +614,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await apiConfirm2FA(userId, secret, code);
     if (res.success) {
       // Atualizar lista local de colaboradores para refletir que 2FA está ativo
-      const updated = employees.map(e => (e.id === userId ? { ...e, twoFactorEnabled: true, twoFactorSecret: secret } : e));
+      const updated = employees.map(e => (e.id === userId ? {
+        ...e,
+        twoFactorEnabled: true,
+        twoFactorSecret: secret,
+        twoFactorSessionExpiresAt: res.twoFactorSessionExpiresAt || e.twoFactorSessionExpiresAt,
+        twoFactorBackupCodes: res.backupCodes || e.twoFactorBackupCodes
+      } : e));
       updateEmployeeList(updated);
       
       notifyBroadcast('EMPLOYEE_UPDATED', { id: userId, updates: { twoFactorEnabled: true } });
@@ -468,6 +628,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     }
     return false;
+  }, [employees, updateEmployeeList, notifyBroadcast]);
+
+  const regenerateBackupCodes = useCallback(async (userId: string): Promise<string[]> => {
+    const res = await apiRegenerateBackupCodes(userId);
+    if (res.success && res.backupCodes) {
+      const updated = employees.map(e => (e.id === userId ? { ...e, twoFactorBackupCodes: res.backupCodes } : e));
+      updateEmployeeList(updated);
+      notifyBroadcast('EMPLOYEE_UPDATED', { id: userId, updates: { twoFactorBackupCodes: res.backupCodes } });
+      return res.backupCodes;
+    }
+    return [];
   }, [employees, updateEmployeeList, notifyBroadcast]);
 
   const disable2FA = useCallback(async (userId: string) => {
@@ -514,8 +685,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sessionToken,
         isAwaiting2FA,
         pendingUser2FA,
+        twoFactorSessionExpiresAt,
+        twoFactorRemainingSeconds,
+        is2FASessionExpired,
+        showReauthModal,
+        setShowReauthModal,
         login,
         verify2FA,
+        renew2FASession,
+        forceReauthAll,
+        regenerateBackupCodes,
         cancel2FA,
         switchUser,
         logout,

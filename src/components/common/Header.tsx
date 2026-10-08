@@ -13,7 +13,11 @@ import {
   Menu,
   X,
   FileText,
-  Plus
+  Plus,
+  Clock,
+  KeyRound,
+  ShieldAlert,
+  Lock
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
@@ -30,7 +34,17 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewOS,
   onOpenNewSale
 }) => {
-  const { currentUser, switchUser, employees, logout, hasPermission } = useAuth();
+  const {
+    currentUser,
+    switchUser,
+    employees,
+    logout,
+    hasPermission,
+    twoFactorSessionExpiresAt,
+    twoFactorRemainingSeconds,
+    renew2FASession,
+    setShowReauthModal
+  } = useAuth();
   const {
     currentTab,
     setCurrentTab,
@@ -55,7 +69,38 @@ export const Header: React.FC<HeaderProps> = ({
   }).length;
 
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showSwitchMenu, setShowSwitchMenu] = useState(false);
+  const [show2FAMenu, setShow2FAMenu] = useState(false);
+  const [renewCodeInput, setRenewCodeInput] = useState('');
+  const [renewMsg, setRenewMsg] = useState('');
+
+  const expiryTimeFormatted = twoFactorSessionExpiresAt
+    ? new Date(twoFactorSessionExpiresAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : '--:--';
+
+  const expiryFullFormatted = twoFactorSessionExpiresAt
+    ? new Date(twoFactorSessionExpiresAt).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    : 'Não definido';
+
+  const hoursLeft = Math.floor(twoFactorRemainingSeconds / 3600);
+  const minutesLeft = Math.floor((twoFactorRemainingSeconds % 3600) / 60);
+
+  const handleQuickRenew = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!renewCodeInput) return;
+    const ok = await renew2FASession(renewCodeInput);
+    if (ok) {
+      setRenewMsg('Sessão renovada!');
+      setRenewCodeInput('');
+      setTimeout(() => setRenewMsg(''), 2500);
+    } else {
+      setRenewMsg('Código inválido!');
+    }
+  };
 
   const getBreadcrumbTitle = (tab: ViewTab) => {
     switch (tab) {
@@ -112,6 +157,114 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Zone 3: Profile & Notifications */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* 2FA Status & Validity Badge ("Até quando funciona") */}
+        <div className="relative">
+          <button
+            onClick={() => setShow2FAMenu(!show2FAMenu)}
+            className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-950/40 px-2.5 py-1.5 hover:bg-emerald-950/70 transition"
+            title="Status da Autenticação em Dois Fatores (2FA) e Validade da Sessão"
+          >
+            <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+            <div className="hidden md:flex flex-col text-left">
+              <span className="text-3xs font-extrabold uppercase text-emerald-400 leading-none">
+                2FA ATIVO
+              </span>
+              <span className="text-3xs text-emerald-200/90 font-mono leading-tight">
+                Até {expiryTimeFormatted} ({hoursLeft}h {minutesLeft}m)
+              </span>
+            </div>
+          </button>
+
+          {show2FAMenu && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShow2FAMenu(false)}
+              />
+              <div className="absolute right-0 top-full mt-2 z-50 w-72 rounded-xl border border-slate-800 bg-slate-900 p-3 shadow-2xl shadow-black/80 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Segurança 2FA Ativa</h4>
+                      <p className="text-3xs text-emerald-300">Obrigatório para Todos</p>
+                    </div>
+                  </div>
+                  <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-3xs font-mono font-bold text-emerald-300">
+                    PROTEGIDO
+                  </span>
+                </div>
+
+                <div className="rounded-lg bg-slate-950 p-2.5 space-y-1.5 text-2xs">
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>Colaborador:</span>
+                    <strong className="text-white truncate max-w-[140px]">{currentUser?.name}</strong>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>Validade da Sessão:</span>
+                    <span className="font-mono text-emerald-400 font-bold">{expiryFullFormatted}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>Tempo Restante:</span>
+                    <span className="font-mono text-cyan-300 font-bold">
+                      {hoursLeft}h {minutesLeft}m
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quick Renew Form */}
+                <form onSubmit={handleQuickRenew} className="space-y-1.5">
+                  <label className="text-3xs font-semibold text-slate-300 block">Renovar sessão 2FA:</label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      maxLength={8}
+                      value={renewCodeInput}
+                      onChange={e => setRenewCodeInput(e.target.value.replace(/[^0-9-]/g, ''))}
+                      placeholder="Código 6 dígitos"
+                      className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs font-mono text-center text-white outline-none focus:border-cyan-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!renewCodeInput}
+                      className="rounded-lg bg-cyan-600 px-2.5 py-1 text-2xs font-bold text-white hover:bg-cyan-500 disabled:opacity-40"
+                    >
+                      Renovar
+                    </button>
+                  </div>
+                  {renewMsg && (
+                    <span className="text-3xs font-bold text-cyan-400 block">{renewMsg}</span>
+                  )}
+                </form>
+
+                <div className="border-t border-slate-800 pt-1 flex justify-between items-center text-3xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRenewCodeInput('123456');
+                    }}
+                    className="text-amber-300 hover:underline font-mono"
+                  >
+                    Usar 123456
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentTab('settings');
+                      setShow2FAMenu(false);
+                    }}
+                    className="font-bold text-cyan-400 hover:text-cyan-300"
+                  >
+                    Configurações 2FA →
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
         {/* User Account / Role Switcher Menu */}
         <div className="relative">
           <button

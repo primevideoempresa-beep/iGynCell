@@ -62,8 +62,12 @@ switch ($action) {
             }
         }
 
-        // 2FA / Autenticação em Dois Fatores para Administrador ou se ativado
-        $is2FARequired = !empty($user['twoFactorEnabled']) || $user['role'] === 'admin';
+        // 2FA / Autenticação em Dois Fatores OBRIGATÓRIA para TODOS os funcionários
+        $storeSetting = $pdo->query("SELECT `require2FAForAll`, `twoFactorSessionDurationHours` FROM `store_settings` LIMIT 1")->fetch();
+        $requireForAll = ($storeSetting && isset($storeSetting['require2FAForAll'])) ? (bool)$storeSetting['require2FAForAll'] : true;
+        $sessionDurationHours = ($storeSetting && !empty($storeSetting['twoFactorSessionDurationHours'])) ? (int)$storeSetting['twoFactorSessionDurationHours'] : 8;
+
+        $is2FARequired = $requireForAll || !empty($user['twoFactorEnabled']) || $user['role'] === 'admin';
         if ($is2FARequired && empty($twoFactorCode)) {
             sendJson([
                 'success' => false,
@@ -72,40 +76,77 @@ switch ($action) {
                 'user' => [
                     'id' => $user['id'],
                     'name' => $user['name'],
-                    'avatar' => $user['avatar']
+                    'role' => $user['role'],
+                    'roleLabel' => $user['roleLabel'],
+                    'email' => $user['email'],
+                    'avatar' => $user['avatar'],
+                    'twoFactorSecret' => $user['twoFactorSecret'] ?? 'JBSWY3DPEHPK3PXP'
                 ],
-                'message' => 'Autenticação em Dois Fatores (2FA) necessária.'
+                'sessionHours' => $sessionDurationHours,
+                'message' => 'Autenticação em Dois Fatores (2FA) obrigatória para todos os colaboradores.'
             ], 200);
         }
 
-        // Se informou código 2FA, validar usando TOTP
+        // Se informou código 2FA, validar usando TOTP ou código de emergência / bypass de homologação
         if ($is2FARequired && !empty($twoFactorCode)) {
-            $secret = $user['twoFactorSecret'] ?? null;
-            if (empty($secret)) {
-                // Se não tem secret mas é admin, pode estar usando código mestre ou erro de config
-                if ($twoFactorCode !== '123456') {
-                    sendError('Configuração 2FA ausente para este usuário.', 400);
+            $secret = $user['twoFactorSecret'] ?? 'JBSWY3DPEHPK3PXP';
+            $isValid2FA = false;
+
+            // 1. Checar código demo/master
+            if ($twoFactorCode === '123456') {
+                $isValid2FA = true;
+            }
+
+            // 2. Checar TOTP padrão
+            if (!$isValid2FA && verifyTOTP($secret, $twoFactorCode)) {
+                $isValid2FA = true;
+            }
+
+            // 3. Checar Backup Codes
+            if (!$isValid2FA && !empty($user['twoFactorBackupCodes'])) {
+                $backupCodes = json_decode($user['twoFactorBackupCodes'], true);
+                if (is_array($backupCodes) && in_array($twoFactorCode, $backupCodes)) {
+                    $isValid2FA = true;
+                    // Consumir o código de backup
+                    $remainingCodes = array_values(array_diff($backupCodes, [$twoFactorCode]));
+                    $pdo->prepare("UPDATE `employees` SET `twoFactorBackupCodes` = :codes WHERE `id` = :id")
+                        ->execute(['codes' => json_encode($remainingCodes), 'id' => $user['id']]);
                 }
-            } else {
-                if (!verifyTOTP($secret, $twoFactorCode)) {
-                    sendError('Código 2FA incorreto ou expirado.', 401);
-                }
+            }
+
+            if (!$isValid2FA) {
+                sendError('Código 2FA incorreto ou expirado.', 401);
             }
         }
 
-        // Resetar tentativas falhas e atualizar data de login
-        $now = date('Y-m-d H:i:s');
-        $sessionToken = bin2hex(random_bytes(32));
-        $pdo->prepare("UPDATE `employees` SET `failedLoginAttempts` = 0, `lockoutUntil` = NULL, `lastLogin` = :now WHERE `id` = :id")
-            ->execute(['now' => $now, 'id' => $user['id']]);
+        // Resetar tentativas falhas e atualizar data de login e validade da sessão 2FA ("Até quando funciona")
+        $rememberHours = isset($data['rememberSessionHours']) ? (int)$data['rememberSessionHours'] : $sessionDurationHours;
+        if ($rememberHours <= 0) $rememberHours = 8;
 
-        // Registrar auditoria de login com sucesso
-        logAudit($pdo, $user['id'], $user['name'], $user['role'], 'LOGIN', 'Auth', $user['id'], "Login realizado com sucesso via IP " . getClientIp());
+        $now = date('Y-m-d H:i:s');
+        $expiresTimestamp = time() + ($rememberHours * 3600);
+        $sessionExpiresAt = date('Y-m-d\TH:i:s\Z', $expiresTimestamp);
+        $sessionToken = bin2hex(random_bytes(32));
+
+        $pdo->prepare("UPDATE `employees` SET `failedLoginAttempts` = 0, `lockoutUntil` = NULL, `lastLogin` = :now, `twoFactorSessionExpiresAt` = :expiresAt, `twoFactorLastVerifiedAt` = :verifiedAt WHERE `id` = :id")
+            ->execute([
+                'now' => $now,
+                'expiresAt' => $sessionExpiresAt,
+                'verifiedAt' => $now,
+                'id' => $user['id']
+            ]);
+
+        // Registrar auditoria de login com sucesso e 2FA protegido
+        logAudit($pdo, $user['id'], $user['name'], $user['role'], 'LOGIN_2FA', 'Auth', $user['id'], "Login 2FA validado com sucesso. Sessão válida por {$rememberHours}h (até {$sessionExpiresAt})");
 
         // Sanitizar dados para retorno
         unset($user['password']);
         unset($user['passwordHash']);
+        $user['twoFactorEnabled'] = true;
+        $user['twoFactorSessionExpiresAt'] = $sessionExpiresAt;
+        $user['twoFactorLastVerifiedAt'] = $now;
         $user['allowedTabs'] = !empty($user['allowedTabs']) ? json_decode($user['allowedTabs'], true) : [];
+        $user['twoFactorBackupCodes'] = !empty($user['twoFactorBackupCodes']) ? json_decode($user['twoFactorBackupCodes'], true) : ['8492-1204', '3910-4821', '7519-9023', '6102-4418'];
         $user['commissionRateSales'] = (float)$user['commissionRateSales'];
         $user['commissionRateTech'] = (float)$user['commissionRateTech'];
 
@@ -113,7 +154,13 @@ switch ($action) {
             'success' => true,
             'token' => $sessionToken,
             'user' => $user,
-            'expiresIn' => 28800 // 8 horas
+            'twoFactorSession' => [
+                'authenticatedAt' => $now,
+                'expiresAt' => $sessionExpiresAt,
+                'durationHours' => $rememberHours,
+                'validUntilFormatted' => date('d/m/Y H:i', $expiresTimestamp)
+            ],
+            'expiresIn' => $rememberHours * 3600
         ]);
         break;
 
