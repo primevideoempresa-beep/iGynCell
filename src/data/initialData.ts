@@ -25,10 +25,7 @@ export const initialStoreSettings: StoreSettings = {
   defaultSaleCommission: 5,
   defaultTechCommission: 10,
   whatsappGreetingTemplate:
-    'Olá {cliente}, aqui é da iGyn Cell (Central Park Shopping). O status da sua Ordem de Serviço #{os} foi atualizado para: *{status}*.\nValor total: {valor}.\nDúvidas? Estamos à disposição no (73) 99147-4434!',
-  require2FAForAll: true,
-  twoFactorSessionDurationHours: 8,
-  enforce2FABackupCodes: true
+    'Olá {cliente}, aqui é da iGyn Cell (Central Park Shopping). O status da sua Ordem de Serviço #{os} foi atualizado para: *{status}*.\nValor total: {valor}.\nDúvidas? Estamos à disposição no (73) 99147-4434!'
 };
 
 export const initialEmployees: Employee[] = [
@@ -58,11 +55,7 @@ export const initialEmployees: Employee[] = [
       'settings'
     ],
     createdAt: '2025-01-10T08:00:00.000Z',
-    lastLogin: '2026-10-05T15:30:00.000Z',
-    twoFactorEnabled: true,
-    twoFactorSecret: 'JBSWY3DPEHPK3PXP',
-    twoFactorActivatedAt: '2025-01-10T08:00:00.000Z',
-    twoFactorBackupCodes: ['8492-1204', '7731-9920', '5512-3849', '4419-8802']
+    lastLogin: '2026-10-05T15:30:00.000Z'
   },
   {
     id: 'emp-2',
@@ -89,11 +82,7 @@ export const initialEmployees: Employee[] = [
       'settings'
     ],
     createdAt: '2025-02-01T08:00:00.000Z',
-    lastLogin: '2026-10-05T14:45:00.000Z',
-    twoFactorEnabled: true,
-    twoFactorSecret: 'KZXW65DFOIZT2QST',
-    twoFactorActivatedAt: '2025-02-01T08:00:00.000Z',
-    twoFactorBackupCodes: ['9912-3401', '6620-8819', '3318-7740', '1182-9932']
+    lastLogin: '2026-10-05T14:45:00.000Z'
   },
   {
     id: 'emp-3',
@@ -116,11 +105,7 @@ export const initialEmployees: Employee[] = [
       'notifications'
     ],
     createdAt: '2025-03-15T08:00:00.000Z',
-    lastLogin: '2026-10-05T16:00:00.000Z',
-    twoFactorEnabled: true,
-    twoFactorSecret: 'MJZXE3TPOBXXK4TS',
-    twoFactorActivatedAt: '2025-03-15T08:00:00.000Z',
-    twoFactorBackupCodes: ['4491-2390', '8812-7492', '5529-1092', '7730-4821']
+    lastLogin: '2026-10-05T16:00:00.000Z'
   },
   {
     id: 'emp-4',
@@ -141,11 +126,7 @@ export const initialEmployees: Employee[] = [
       'clients',
       'notifications'
     ],
-    createdAt: '2025-04-01T08:00:00.000Z',
-    twoFactorEnabled: true,
-    twoFactorSecret: 'NZSWG4LBNRUXA5DV',
-    twoFactorActivatedAt: '2025-04-01T08:00:00.000Z',
-    twoFactorBackupCodes: ['2290-1182', '6649-8831', '3391-7720', '5501-4493']
+    createdAt: '2025-04-01T08:00:00.000Z'
   },
   {
     id: 'emp-5',
@@ -167,11 +148,7 @@ export const initialEmployees: Employee[] = [
       'notifications'
     ],
     createdAt: '2025-05-10T08:00:00.000Z',
-    lastLogin: '2026-10-05T15:55:00.000Z',
-    twoFactorEnabled: true,
-    twoFactorSecret: 'OJXXI2LPNRUW43TW',
-    twoFactorActivatedAt: '2025-05-10T08:00:00.000Z',
-    twoFactorBackupCodes: ['1192-3384', '7729-5501', '4482-9910', '8830-2271']
+    lastLogin: '2026-10-05T15:55:00.000Z'
   },
   {
     id: 'emp-6',
@@ -193,11 +170,7 @@ export const initialEmployees: Employee[] = [
       'notifications'
     ],
     createdAt: '2025-06-01T08:00:00.000Z',
-    lastLogin: '2026-10-04T18:00:00.000Z',
-    twoFactorEnabled: true,
-    twoFactorSecret: 'PJZXI3DBNRUXQ2LE',
-    twoFactorActivatedAt: '2025-06-01T08:00:00.000Z',
-    twoFactorBackupCodes: ['9938-4421', '3381-6672', '5510-8893', '2240-7719']
+    lastLogin: '2026-10-04T18:00:00.000Z'
   }
 ];
 

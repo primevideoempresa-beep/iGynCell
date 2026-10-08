@@ -18,14 +18,10 @@ import {
   HardDrive,
   Code2,
   ExternalLink,
-  Save,
-  Lock,
-  QrCode,
-  Clock
+  Save
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { QRCodeSVG } from 'qrcode.react';
 import { testBackendConnection, BackendConnectionTestResult } from '../../services/api';
 
 export const SettingsPanel: React.FC = () => {
@@ -49,19 +45,7 @@ export const SettingsPanel: React.FC = () => {
     syncWithDatabase,
     isSyncing
   } = useApp();
-  const {
-    currentUser,
-    isRole,
-    setup2FA,
-    confirm2FA,
-    disable2FA,
-    twoFactorSessionExpiresAt,
-    twoFactorRemainingSeconds,
-    forceReauthAll
-  } = useAuth();
-
-  // Get current user data from employees list to have fresh 2FA status
-  const userData = employees.find(e => e.id === currentUser?.id) || currentUser;
+  const { isRole } = useAuth();
 
   const [storeName, setStoreName] = useState(settings.storeName);
   const [tradeName, setTradeName] = useState(settings.tradeName);
@@ -76,12 +60,6 @@ export const SettingsPanel: React.FC = () => {
   const [defaultTechCommission, setDefaultTechCommission] = useState(settings.defaultTechCommission);
   const [whatsappGreetingTemplate, setWhatsappGreetingTemplate] = useState(settings.whatsappGreetingTemplate);
 
-  // Global 2FA Policy State
-  const [require2FAForAll, setRequire2FAForAll] = useState(settings.require2FAForAll ?? true);
-  const [twoFactorSessionDurationHours, setTwoFactorSessionDurationHours] = useState(settings.twoFactorSessionDurationHours || 8);
-  const [selectedEmp2FA, setSelectedEmp2FA] = useState<any | null>(null);
-  const [reauthSuccessMsg, setReauthSuccessMsg] = useState('');
-
   // PHP/MySQL Backend Config State
   const [apiUrlInput, setApiUrlInput] = useState(phpApiUrl);
   const [testResult, setTestResult] = useState<BackendConnectionTestResult | null>(backendStatusInfo);
@@ -89,61 +67,6 @@ export const SettingsPanel: React.FC = () => {
   const [showSetupGuide, setShowSetupGuide] = useState(false);
 
   const [savedSuccess, setSavedSuccess] = useState(false);
-
-  // 2FA Setup State for Current User
-  const [isSettingUp2FA, setIsSettingUp2FA] = useState(false);
-  const [twoFactorSecret, setTwoFactorSecret] = useState('');
-  const [qrCodeUri, setQrCodeUri] = useState('');
-  const [confirmationCode, setConfirmationCode] = useState('');
-  const [twoFactorError, setTwoFactorError] = useState('');
-  const [isConfirming2FA, setIsConfirming2FA] = useState(false);
-
-  const handleStartSetup2FA = async () => {
-    setTwoFactorError('');
-    try {
-      if (!userData) return;
-      const { secret, qrCodeUri } = await setup2FA(userData.id);
-      setTwoFactorSecret(secret);
-      setQrCodeUri(qrCodeUri);
-      setIsSettingUp2FA(true);
-    } catch (err: any) {
-      setTwoFactorError(err.message);
-    }
-  };
-
-  const handleConfirmActivation = async () => {
-    setTwoFactorError('');
-    setIsConfirming2FA(true);
-    try {
-      if (!userData) return;
-      const ok = await confirm2FA(userData.id, twoFactorSecret, confirmationCode);
-      if (ok) {
-        setIsSettingUp2FA(false);
-        setConfirmationCode('');
-        setSavedSuccess(true);
-        setTimeout(() => setSavedSuccess(false), 3000);
-      } else {
-        setTwoFactorError('Código incorreto. Tente novamente.');
-      }
-    } catch (err: any) {
-      setTwoFactorError(err.message);
-    } finally {
-      setIsConfirming2FA(false);
-    }
-  };
-
-  const handleDisable2FA = async () => {
-    if (!userData) return;
-    if (confirm('Tem certeza que deseja desativar a proteção 2FA para sua conta?')) {
-      const ok = await disable2FA(userData.id);
-      if (ok) {
-        setSavedSuccess(true);
-        setTimeout(() => setSavedSuccess(false), 3000);
-      } else {
-        alert('Erro ao desativar 2FA.');
-      }
-    }
-  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,9 +82,7 @@ export const SettingsPanel: React.FC = () => {
       warrantyTerms,
       defaultSaleCommission,
       defaultTechCommission,
-      whatsappGreetingTemplate,
-      require2FAForAll,
-      twoFactorSessionDurationHours
+      whatsappGreetingTemplate
     });
     setPhpApiUrl(apiUrlInput);
     setSavedSuccess(true);
@@ -575,271 +496,6 @@ export const SettingsPanel: React.FC = () => {
             </div>
           </div>
         </div>
-
-        {/* Security / 2FA Section: Enforced for ALL Employees */}
-        <div className="rounded-2xl border border-emerald-500/30 bg-slate-900/80 p-5 sm:p-6 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-xl bg-emerald-500/20 border border-emerald-500/40 p-2.5 text-emerald-400">
-                <ShieldCheck className="h-6 w-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Política Global: 2FA Obrigatório para Todos os Funcionários
-                  </h3>
-                  <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-3xs font-mono font-bold text-emerald-300">
-                    100% PROTEGIDO
-                  </span>
-                </div>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  Proteção de dois fatores ativa para todos os cargos (Proprietário, Gerente, Vendedores e Técnicos).
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 cursor-pointer bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
-                <input
-                  type="checkbox"
-                  checked={require2FAForAll}
-                  onChange={e => setRequire2FAForAll(e.target.checked)}
-                  className="rounded text-cyan-500 focus:ring-0"
-                />
-                <span className="font-semibold text-slate-200">Exigir 2FA para Todos</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Configuração "Até quando funciona" - Duração da Sessão 2FA */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <Clock className="h-4 w-4 text-cyan-400" />
-                  <span>Até quando funciona a sessão 2FA (Validade da Autenticação)</span>
-                </h4>
-                <p className="text-2xs text-slate-400 mt-0.5">
-                  Define por quanto tempo o funcionário permanece autenticado antes de precisar reinserir o código de 6 dígitos.
-                </p>
-              </div>
-
-              <span className="font-mono text-xs font-bold text-cyan-300 bg-cyan-950/60 border border-cyan-800/40 px-3 py-1 rounded-lg">
-                Válido por {twoFactorSessionDurationHours} horas
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-              {[
-                { hours: 4, label: '4 horas' },
-                { hours: 8, label: '8h (Turno)' },
-                { hours: 12, label: '12 horas' },
-                { hours: 24, label: '24 horas' },
-                { hours: 168, label: '7 dias' },
-                { hours: 720, label: '30 dias' }
-              ].map(opt => (
-                <button
-                  key={opt.hours}
-                  type="button"
-                  onClick={() => setTwoFactorSessionDurationHours(opt.hours)}
-                  className={`py-2 px-2.5 rounded-xl text-xs font-bold transition text-center border ${
-                    twoFactorSessionDurationHours === opt.hours
-                      ? 'border-cyan-500 bg-cyan-500/20 text-cyan-300 shadow-sm shadow-cyan-950'
-                      : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Current user session feedback */}
-            <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-2xs">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400">Sua sessão atual funciona até:</span>
-                <span className="font-mono font-bold text-emerald-400">
-                  {twoFactorSessionExpiresAt ? new Date(twoFactorSessionExpiresAt).toLocaleString('pt-BR') : 'Ativa'}
-                </span>
-                {twoFactorRemainingSeconds > 0 && (
-                  <span className="text-cyan-300 font-mono">
-                    (Restam {Math.floor(twoFactorRemainingSeconds / 3600)}h {Math.floor((twoFactorRemainingSeconds % 3600) / 60)}m)
-                  </span>
-                )}
-              </div>
-
-              {isRole(['admin', 'manager']) && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (confirm('Deseja forçar reautenticação 2FA para todos os funcionários agora? As sessões serão invalidadas imediatamente.')) {
-                      await forceReauthAll();
-                      setReauthSuccessMsg('Sessões 2FA invalidadas com sucesso!');
-                      setTimeout(() => setReauthSuccessMsg(''), 3000);
-                    }
-                  }}
-                  className="text-2xs font-semibold text-rose-400 hover:text-rose-300 underline underline-offset-2"
-                >
-                  Forçar Reautenticação Geral
-                </button>
-              )}
-            </div>
-            {reauthSuccessMsg && (
-              <p className="text-2xs font-bold text-rose-400 bg-rose-400/10 p-2 rounded-lg border border-rose-400/20">
-                {reauthSuccessMsg}
-              </p>
-            )}
-          </div>
-
-          {/* Lista de Auditoria de 2FA de Todos os Funcionários */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center justify-between">
-              <span>Status de 2FA por Colaborador ({employees.length} de {employees.length})</span>
-              <span className="text-2xs text-emerald-400 font-normal">Todos protegidos</span>
-            </h4>
-
-            <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950/60">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-2xs">
-                  <thead className="bg-slate-900/90 text-slate-400 border-b border-slate-800">
-                    <tr>
-                      <th className="py-2.5 px-3">Colaborador</th>
-                      <th className="py-2.5 px-3">Cargo</th>
-                      <th className="py-2.5 px-3">Status 2FA</th>
-                      <th className="py-2.5 px-3">Sessão Válida Até (Até quando funciona)</th>
-                      <th className="py-2.5 px-3 text-right">Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                    {employees.map(emp => {
-                      const expiryFormatted = emp.twoFactorSessionExpiresAt
-                        ? new Date(emp.twoFactorSessionExpiresAt).toLocaleString('pt-BR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })
-                        : 'Ativo c/ Login';
-
-                      return (
-                        <tr key={emp.id} className="hover:bg-slate-900/40 transition">
-                          <td className="py-2.5 px-3">
-                            <div className="flex items-center gap-2">
-                              <img
-                                src={emp.avatar}
-                                alt={emp.name}
-                                className="h-6 w-6 rounded-full object-cover border border-slate-700"
-                              />
-                              <div>
-                                <strong className="text-white block">{emp.name}</strong>
-                                <span className="text-3xs text-slate-400">{emp.email}</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3 font-medium text-slate-300">
-                            {emp.roleLabel}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-3xs border border-emerald-500/30">
-                              <CheckCircle2 className="h-3 w-3" />
-                              2FA ATIVO
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-cyan-300 font-semibold">
-                            {expiryFormatted}
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedEmp2FA(emp)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 border border-cyan-500/30 font-bold transition text-3xs"
-                            >
-                              <QrCode className="h-3 w-3" />
-                              <span>Ver QR Code / Chave</span>
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Modal para Visualização de Chaves 2FA do Colaborador */}
-        {selectedEmp2FA && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-            <div className="w-full max-w-lg rounded-2xl border border-cyan-500/30 bg-slate-900 p-6 space-y-5 shadow-2xl">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400">
-                    <ShieldCheck className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white">Chaves de 2FA do Colaborador</h4>
-                    <p className="text-2xs text-slate-400">{selectedEmp2FA.name} • {selectedEmp2FA.roleLabel}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedEmp2FA(null)}
-                  className="text-slate-400 hover:text-white p-1 rounded-lg"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-                <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-white space-y-2">
-                  <QRCodeSVG
-                    value={`otpauth://totp/iGynCell:${encodeURIComponent(selectedEmp2FA.email)}?secret=${selectedEmp2FA.twoFactorSecret || 'JBSWY3DPEHPK3PXP'}&issuer=iGynCell`}
-                    size={140}
-                    level="H"
-                  />
-                  <span className="text-3xs text-slate-600 font-medium">Google Authenticator / Authy</span>
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <span className="text-2xs text-slate-400 block mb-1">Chave Secreta (Base32):</span>
-                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-2 font-mono text-cyan-400 font-bold text-center tracking-widest text-xs select-all">
-                      {selectedEmp2FA.twoFactorSecret || 'JBSWY3DPEHPK3PXP'}
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-2xs text-slate-400 block mb-1">Validade da Sessão ("Até quando funciona"):</span>
-                    <div className="rounded-lg bg-slate-950 border border-slate-800 p-2 text-2xs font-mono text-emerald-400">
-                      {selectedEmp2FA.twoFactorSessionExpiresAt ? new Date(selectedEmp2FA.twoFactorSessionExpiresAt).toLocaleString('pt-BR') : 'Ativa c/ Login'}
-                    </div>
-                  </div>
-
-                  {selectedEmp2FA.twoFactorBackupCodes && selectedEmp2FA.twoFactorBackupCodes.length > 0 && (
-                    <div>
-                      <span className="text-2xs text-slate-400 block mb-1">Códigos Reserva de Emergência:</span>
-                      <div className="grid grid-cols-2 gap-1 bg-slate-950 border border-slate-800 p-2 rounded-lg font-mono text-3xs text-amber-300">
-                        {selectedEmp2FA.twoFactorBackupCodes.map((c: string, idx: number) => (
-                          <span key={idx} className="bg-slate-900 px-1.5 py-0.5 rounded text-center">{c}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setSelectedEmp2FA(null)}
-                  className="rounded-lg bg-cyan-600 px-5 py-2 text-xs font-bold text-white hover:bg-cyan-500 transition"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Submit */}
         <div className="flex items-center justify-end">

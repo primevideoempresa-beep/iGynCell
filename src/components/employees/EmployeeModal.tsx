@@ -4,7 +4,6 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Modal } from '../common/Modal';
 import { formatPhone } from '../../utils/formatters';
-import { QRCodeSVG } from 'qrcode.react';
 import { 
   Users, 
   ShieldCheck, 
@@ -18,10 +17,7 @@ import {
   Check,
   CheckCircle2,
   Unlock,
-  X,
-  Clock,
-  KeyRound,
-  Copy
+  X
 } from 'lucide-react';
 
 interface EmployeeModalProps {
@@ -36,11 +32,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
   employeeToEdit
 }) => {
   const { addEmployee, updateEmployee, deleteEmployee } = useApp();
-  const { currentUser, isRole, unlockUser, setup2FA, confirm2FA, disable2FA } = useAuth();
-  const { employees: allEmployees } = useApp();
-
-  // Get current state of employeeToEdit from the global list to keep UI in sync
-  const currentEmployee = allEmployees.find(e => e.id === employeeToEdit?.id) || employeeToEdit;
+  const { currentUser, isRole, unlockUser } = useAuth();
 
   const isAdmin = isRole(['admin', 'manager']);
   const isEditingSelf = employeeToEdit?.id === currentUser?.id;
@@ -71,15 +63,6 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
     'commissions',
     'notifications'
   ]);
-  
-  // 2FA Setup State
-  const [isSettingUp2FA, setIsSettingUp2FA] = useState(false);
-  const [twoFactorSecret, setTwoFactorSecret] = useState('');
-  const [qrCodeUri, setQrCodeUri] = useState('');
-  const [confirmationCode, setConfirmationCode] = useState('');
-  const [twoFactorError, setTwoFactorError] = useState('');
-  const [isConfirming2FA, setIsConfirming2FA] = useState(false);
-
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,46 +127,6 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
     }
     deleteEmployee(employeeToEdit.id);
     onClose();
-  };
-
-  const handleStartSetup2FA = async () => {
-    setTwoFactorError('');
-    try {
-      if (!employeeToEdit) return;
-      const { secret, qrCodeUri } = await setup2FA(employeeToEdit.id);
-      setTwoFactorSecret(secret);
-      setQrCodeUri(qrCodeUri);
-      setIsSettingUp2FA(true);
-    } catch (err: any) {
-      setTwoFactorError(err.message);
-    }
-  };
-
-  const handleConfirmActivation = async () => {
-    setTwoFactorError('');
-    setIsConfirming2FA(true);
-    try {
-      if (!employeeToEdit) return;
-      const ok = await confirm2FA(employeeToEdit.id, twoFactorSecret, confirmationCode);
-      if (ok) {
-        setIsSettingUp2FA(false);
-        setConfirmationCode('');
-      } else {
-        setTwoFactorError('Código incorreto. Tente novamente.');
-      }
-    } catch (err: any) {
-      setTwoFactorError(err.message);
-    } finally {
-      setIsConfirming2FA(false);
-    }
-  };
-
-  const handleDisable2FA = async () => {
-    if (!employeeToEdit) return;
-    if (confirm('Tem certeza que deseja desativar a proteção 2FA para este colaborador?')) {
-      const ok = await disable2FA(employeeToEdit.id);
-      if (!ok) alert('Erro ao desativar 2FA.');
-    }
   };
 
   const handleRoleChange = (newRole: UserRole) => {
@@ -458,172 +401,6 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
             />
           </div>
         </div>
-
-        {/* Two-Factor Authentication (2FA) Section - Mandatory for all employees */}
-        {currentEmployee && (
-          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <ShieldCheck className="h-5 w-5 text-emerald-400" />
-                <div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Autenticação de Dois Fatores (2FA)</h3>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 font-mono">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      100% OBRIGATÓRIO & ATIVADO
-                    </span>
-                    <span className="text-3xs text-slate-400">
-                      • Protegido por TOTP (Google Authenticator)
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {!isSettingUp2FA ? (
-                  <button
-                    type="button"
-                    onClick={handleStartSetup2FA}
-                    className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-[10px] font-bold text-cyan-300 hover:bg-cyan-500/20 transition flex items-center gap-1"
-                  >
-                    <span>Ver QR Code / Reconfigurar</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsSettingUp2FA(false)}
-                    className="text-[10px] font-bold text-slate-400 hover:text-white"
-                  >
-                    Fechar
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Informações de Validade "Até quando funciona" */}
-            <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 space-y-2 text-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>Sessão 2FA ativa até (Até quando funciona):</span>
-                </span>
-                <span className="font-mono font-bold text-cyan-300">
-                  {currentEmployee.twoFactorSessionExpiresAt
-                    ? new Date(currentEmployee.twoFactorSessionExpiresAt).toLocaleString('pt-BR')
-                    : 'Renovada no login (conforme turno)'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-3xs text-slate-400 pt-1 border-t border-slate-800/80">
-                <span>Ativado em:</span>
-                <span className="font-mono text-slate-300">
-                  {currentEmployee.twoFactorActivatedAt
-                    ? new Date(currentEmployee.twoFactorActivatedAt).toLocaleDateString('pt-BR')
-                    : 'Desde o cadastro'}
-                </span>
-              </div>
-            </div>
-
-            {/* Códigos de Reserva de Emergência */}
-            {currentEmployee.twoFactorBackupCodes && currentEmployee.twoFactorBackupCodes.length > 0 && (
-              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-2 text-2xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                    <KeyRound className="h-3.5 w-3.5 text-amber-400" />
-                    <span>Códigos de Reserva de Emergência ({currentEmployee.twoFactorBackupCodes.length} restantes)</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(currentEmployee.twoFactorBackupCodes!.join('\n'));
-                      alert('Códigos de reserva copiados para a área de transferência!');
-                    }}
-                    className="text-3xs text-cyan-400 hover:underline font-mono"
-                  >
-                    Copiar Todos
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1">
-                  {currentEmployee.twoFactorBackupCodes.map((code, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-slate-900 border border-slate-800 rounded px-2 py-1 font-mono text-3xs text-center text-amber-200 font-bold"
-                    >
-                      {code}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {isSettingUp2FA && (
-              <div className="bg-slate-950/90 p-5 rounded-xl border border-cyan-500/30 space-y-5 animate-in slide-in-from-top-2 duration-200">
-                <div className="flex flex-col sm:flex-row items-center gap-6">
-                  <div className="bg-white p-2 rounded-lg shrink-0 shadow-lg">
-                    <QRCodeSVG value={qrCodeUri || `otpauth://totp/iGynCell:${encodeURIComponent(currentEmployee.email)}?secret=${twoFactorSecret || currentEmployee.twoFactorSecret || 'JBSWY3DPEHPK3PXP'}&issuer=iGynCell`} size={130} level="M" />
-                  </div>
-                  
-                  <div className="flex-1 space-y-3">
-                    <div>
-                      <p className="text-2xs font-bold text-white mb-1">1. Escaneie o QR Code</p>
-                      <p className="text-[10px] text-slate-400 leading-relaxed">
-                        Abra o Google Authenticator, Microsoft Authenticator ou Authy no smartphone do colaborador.
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-2xs font-bold text-white mb-1">2. Chave Secreta Manual</p>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 font-mono text-xs text-cyan-400 font-bold tracking-widest text-center select-all">
-                          {twoFactorSecret || currentEmployee.twoFactorSecret || 'JBSWY3DPEHPK3PXP'}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(twoFactorSecret || currentEmployee.twoFactorSecret || 'JBSWY3DPEHPK3PXP');
-                            alert('Chave copiada!');
-                          }}
-                          className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:text-white"
-                          title="Copiar Chave"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-800 space-y-3">
-                  <p className="text-2xs font-bold text-white">3. Testar ou reconfirmar código</p>
-                  <p className="text-[10px] text-slate-400">
-                    Insira o código de 6 dígitos gerado pelo app ou utilize <strong className="text-cyan-300 font-mono">123456</strong> para teste rápido:
-                  </p>
-                  
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={confirmationCode}
-                      onChange={e => setConfirmationCode(e.target.value.replace(/\D/g, ''))}
-                      placeholder="000 000"
-                      className="flex-1 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm font-mono font-bold tracking-[0.3em] text-center text-white outline-none focus:border-cyan-500"
-                    />
-                    <button
-                      type="button"
-                      disabled={confirmationCode.length < 6 || isConfirming2FA}
-                      onClick={handleConfirmActivation}
-                      className="rounded-lg bg-emerald-600 px-5 py-2 text-xs font-bold text-white hover:bg-emerald-500 transition disabled:opacity-40"
-                    >
-                      {isConfirming2FA ? 'Validando...' : 'Reconfirmar Ativação'}
-                    </button>
-                  </div>
-                  {twoFactorError && (
-                    <p className="text-[10px] font-bold text-rose-400">{twoFactorError}</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Permitted Modules Checklist */}
         {isAdmin && (

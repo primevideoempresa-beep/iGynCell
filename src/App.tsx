@@ -18,7 +18,6 @@ import { AuditLogsView } from './components/audit/AuditLogsView';
 import { SettingsPanel } from './components/settings/SettingsPanel';
 import { ServiceOrderModal } from './components/orders/ServiceOrderModal';
 import { NewSaleModal } from './components/sales/NewSaleModal';
-import { Reauth2FAModal } from './components/auth/Reauth2FAModal';
 
 const MainAppContent: React.FC = () => {
   const { currentUser } = useAuth();
@@ -106,9 +105,6 @@ const MainAppContent: React.FC = () => {
         isOpen={isNewSaleOpen}
         onClose={() => setIsNewSaleOpen(false)}
       />
-
-      {/* 2FA Session Expiration & Reauthentication Modal */}
-      <Reauth2FAModal />
     </div>
   );
 };

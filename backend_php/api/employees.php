@@ -14,10 +14,6 @@ switch ($method) {
             $emp['commissionRateSales'] = (float)$emp['commissionRateSales'];
             $emp['commissionRateTech'] = (float)$emp['commissionRateTech'];
             $emp['allowedTabs'] = !empty($emp['allowedTabs']) ? json_decode($emp['allowedTabs'], true) : [];
-            $emp['twoFactorEnabled'] = (bool)$emp['twoFactorEnabled'];
-            unset($emp['twoFactorSecret']);
-            unset($emp['password']);
-            unset($emp['passwordHash']);
         }
         sendJson($rows);
         break;
@@ -28,13 +24,11 @@ switch ($method) {
         $newId = "emp-" . ($count + 1);
         $now = date('Y-m-d H:i:s');
         $tabs = !empty($data['allowedTabs']) ? json_encode($data['allowedTabs'], JSON_UNESCAPED_UNICODE) : '["dashboard","orders","sales"]';
-        $twoFactorEnabled = !empty($data['twoFactorEnabled']) ? 1 : 0;
-        $twoFactorSecret = $data['twoFactorSecret'] ?? null;
 
         $stmt = $pdo->prepare("INSERT INTO `employees` (
-            `id`, `name`, `email`, `password`, `role`, `roleLabel`, `avatar`, `phone`, `status`, `commissionRateSales`, `commissionRateTech`, `allowedTabs`, `twoFactorEnabled`, `twoFactorSecret`, `createdAt`
+            `id`, `name`, `email`, `password`, `role`, `roleLabel`, `avatar`, `phone`, `status`, `commissionRateSales`, `commissionRateTech`, `allowedTabs`, `createdAt`
         ) VALUES (
-            :id, :name, :email, :password, :role, :roleLabel, :avatar, :phone, :status, :commissionRateSales, :commissionRateTech, :allowedTabs, :twoFactorEnabled, :twoFactorSecret, :createdAt
+            :id, :name, :email, :password, :role, :roleLabel, :avatar, :phone, :status, :commissionRateSales, :commissionRateTech, :allowedTabs, :createdAt
         )");
         $stmt->execute([
             'id' => $newId,
@@ -49,8 +43,6 @@ switch ($method) {
             'commissionRateSales' => (float)($data['commissionRateSales'] ?? 0),
             'commissionRateTech' => (float)($data['commissionRateTech'] ?? 0),
             'allowedTabs' => $tabs,
-            'twoFactorEnabled' => $twoFactorEnabled,
-            'twoFactorSecret' => $twoFactorSecret,
             'createdAt' => $now
         ]);
 
@@ -78,9 +70,7 @@ switch ($method) {
             `status` = COALESCE(:status, `status`),
             `commissionRateSales` = COALESCE(:commissionRateSales, `commissionRateSales`),
             `commissionRateTech` = COALESCE(:commissionRateTech, `commissionRateTech`),
-            `allowedTabs` = COALESCE(:allowedTabs, `allowedTabs`),
-            `twoFactorEnabled` = COALESCE(:twoFactorEnabled, `twoFactorEnabled`),
-            `twoFactorSecret` = COALESCE(:twoFactorSecret, `twoFactorSecret`)
+            `allowedTabs` = COALESCE(:allowedTabs, `allowedTabs`)
             WHERE `id` = :id");
 
         $stmt->execute([
@@ -93,8 +83,6 @@ switch ($method) {
             'commissionRateSales' => isset($data['commissionRateSales']) ? (float)$data['commissionRateSales'] : null,
             'commissionRateTech' => isset($data['commissionRateTech']) ? (float)$data['commissionRateTech'] : null,
             'allowedTabs' => $tabs,
-            'twoFactorEnabled' => isset($data['twoFactorEnabled']) ? (int)$data['twoFactorEnabled'] : null,
-            'twoFactorSecret' => $data['twoFactorSecret'] ?? null,
             'id' => $id
         ]);
         sendJson(['success' => true, 'id' => $id]);

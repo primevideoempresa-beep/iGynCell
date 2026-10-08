@@ -11,10 +11,7 @@
     "warrantyTerms": "Garantia legal de 90 (noventa) dias para serviços executados e peças substituídas, contados a partir da data de entrega, conforme Artigo 26 do Código de Defesa do Consumidor. A garantia cobre exclusivamente o defeito relatado e corrigido nesta Ordem de Serviço, perdendo a validade em caso de queda, contato com líquidos, violação do lacre de segurança ou intervenção de terceiros.",
     "defaultSaleCommission": 5,
     "defaultTechCommission": 10,
-    "whatsappGreetingTemplate": "Olá {cliente}, aqui é da iGyn Cell (Central Park Shopping). O status da sua Ordem de Serviço #{os} foi atualizado para: *{status}*.\nValor total: {valor}.\nDúvidas? Estamos à disposição no (73) 99147-4434!",
-    "require2FAForAll": true,
-    "twoFactorSessionDurationHours": 8,
-    "enforce2FABackupCodes": true
+    "whatsappGreetingTemplate": "Olá {cliente}, aqui é da iGyn Cell (Central Park Shopping). O status da sua Ordem de Serviço #{os} foi atualizado para: *{status}*.\nValor total: {valor}.\nDúvidas? Estamos à disposição no (73) 99147-4434!"
   },
   "employees": [
     {
@@ -43,41 +40,30 @@
         "settings"
       ],
       "createdAt": "2025-01-10T08:00:00.000Z",
-      "lastLogin": "2026-10-05T15:30:00.000Z",
-      "twoFactorEnabled": true,
-      "twoFactorSecret": "JBSWY3DPEHPK3PXP",
-      "twoFactorActivatedAt": "2025-01-10T08:00:00.000Z",
-      "twoFactorBackupCodes": ["8492-1204", "3910-4821", "7519-9023", "6102-4418"]
+      "lastLogin": "2026-10-05T15:30:00.000Z"
     },
     {
-      "id": "emp-2",
-      "name": "Camila Duarte",
-      "email": "gerente@igyncell.com.br",
-      "password": "gerente",
-      "role": "manager",
-      "roleLabel": "Gerente Geral",
-      "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
-      "phone": "(73) 99111-2233",
+      "id": "emp-3",
+      "name": "Lucas Santos",
+      "email": "lucas.tech@igyncell.com.br",
+      "password": "tech",
+      "role": "technician",
+      "roleLabel": "Técnico Especialista Apple & Android",
+      "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+      "phone": "(73) 99123-4567",
       "status": "active",
-      "commissionRateSales": 4,
-      "commissionRateTech": 8,
+      "commissionRateSales": 3,
+      "commissionRateTech": 12,
       "allowedTabs": [
         "dashboard",
         "orders",
-        "sales",
-        "inventory",
         "parts",
         "clients",
-        "financial",
         "commissions",
-        "notifications",
-        "settings"
+        "notifications"
       ],
-      "createdAt": "2025-02-15T08:00:00.000Z",
-      "twoFactorEnabled": true,
-      "twoFactorSecret": "KRSXG5CTMVRXEZLU",
-      "twoFactorActivatedAt": "2025-02-15T08:00:00.000Z",
-      "twoFactorBackupCodes": ["9124-7731", "4481-2093", "8823-1104", "3590-6712"]
+      "createdAt": "2025-03-15T08:00:00.000Z",
+      "lastLogin": "2026-10-05T16:00:00.000Z"
     },
     {
       "id": "emp-4",
@@ -98,11 +84,7 @@
         "clients",
         "notifications"
       ],
-      "createdAt": "2025-04-01T08:00:00.000Z",
-      "twoFactorEnabled": true,
-      "twoFactorSecret": "MZXW6YTBOI====== ",
-      "twoFactorActivatedAt": "2025-04-01T08:00:00.000Z",
-      "twoFactorBackupCodes": ["1948-2839", "5021-9934", "7714-3829", "6201-5582"]
+      "createdAt": "2025-04-01T08:00:00.000Z"
     },
     {
       "id": "emp-5",
@@ -124,11 +106,7 @@
         "notifications"
       ],
       "createdAt": "2025-05-10T08:00:00.000Z",
-      "lastLogin": "2026-10-05T15:55:00.000Z",
-      "twoFactorEnabled": true,
-      "twoFactorSecret": "OB2HK4DFEBSXG43U",
-      "twoFactorActivatedAt": "2025-05-10T08:00:00.000Z",
-      "twoFactorBackupCodes": ["3391-4420", "8102-5591", "2489-7013", "6921-8840"]
+      "lastLogin": "2026-10-05T15:55:00.000Z"
     }
   ],
   "clients": [
@@ -1327,58 +1305,6 @@
     }
   ],
   "auditLogs": [
-    {
-      "id": "log-1791421035622-9z7f",
-      "userId": "emp-1",
-      "userName": "Rodrigo Silva",
-      "userRole": "admin",
-      "action": "UPDATE",
-      "entity": "Employee",
-      "entityId": "emp-1",
-      "details": "Autenticação em Dois Fatores (2FA) desativada para o colaborador.",
-      "ipAddress": "190.89.78.204, 169.254.169.126",
-      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
-      "createdAt": "2026-10-08T00:57:15.622Z"
-    },
-    {
-      "id": "log-1791421029862-tadn",
-      "userId": "emp-1",
-      "userName": "Rodrigo Silva",
-      "userRole": "admin",
-      "action": "UPDATE",
-      "entity": "Employee",
-      "entityId": "emp-1",
-      "details": "Autenticação em Dois Fatores (2FA) ativada para o colaborador.",
-      "ipAddress": "190.89.78.204, 169.254.169.126",
-      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
-      "createdAt": "2026-10-08T00:57:09.862Z"
-    },
-    {
-      "id": "log-1791421026603-4cdu",
-      "userId": "emp-1",
-      "userName": "Rodrigo Silva",
-      "userRole": "admin",
-      "action": "UPDATE",
-      "entity": "Employee",
-      "entityId": "emp-1",
-      "details": "Autenticação em Dois Fatores (2FA) ativada para o colaborador.",
-      "ipAddress": "190.89.78.204, 169.254.169.126",
-      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
-      "createdAt": "2026-10-08T00:57:06.603Z"
-    },
-    {
-      "id": "log-1791420986854-tyme",
-      "userId": "system",
-      "userName": "Sistema",
-      "userRole": "seller",
-      "action": "LOGIN",
-      "entity": "Auth",
-      "entityId": "emp-1",
-      "details": "Login 2FA validado com sucesso para Rodrigo Silva",
-      "ipAddress": "190.89.78.204, 169.254.169.126",
-      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
-      "createdAt": "2026-10-08T00:56:26.854Z"
-    },
     {
       "id": "log-1791249131373-sy4u",
       "userId": "system",

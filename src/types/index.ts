@@ -30,10 +30,6 @@ export interface Employee {
   allowedTabs: ViewTab[];
   twoFactorEnabled?: boolean;
   twoFactorSecret?: string;
-  twoFactorActivatedAt?: string;
-  twoFactorLastVerifiedAt?: string;
-  twoFactorSessionExpiresAt?: string;
-  twoFactorBackupCodes?: string[];
   failedLoginAttempts?: number;
   lockoutUntil?: string;
   createdAt: string;
@@ -260,7 +256,4 @@ export interface StoreSettings {
   defaultSaleCommission: number;
   defaultTechCommission: number;
   whatsappGreetingTemplate: string;
-  require2FAForAll: boolean;
-  twoFactorSessionDurationHours: number;
-  enforce2FABackupCodes?: boolean;
 }
