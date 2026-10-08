@@ -48,7 +48,10 @@ export const SettingsPanel: React.FC = () => {
     syncWithDatabase,
     isSyncing
   } = useApp();
-  const { isRole } = useAuth();
+  const { currentUser, isRole, setup2FA, confirm2FA, disable2FA } = useAuth();
+
+  // Get current user data from employees list to have fresh 2FA status
+  const userData = employees.find(e => e.id === currentUser?.id) || currentUser;
 
   const [storeName, setStoreName] = useState(settings.storeName);
   const [tradeName, setTradeName] = useState(settings.tradeName);
