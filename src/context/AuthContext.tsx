@@ -367,9 +367,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentUser, logSecurityEvent]);
 
   const toggle2FAForUser = useCallback((userId: string, enabled: boolean) => {
+    const user = employees.find(e => e.id === userId);
+    if (!user) return;
+
     const updated = employees.map(e => (e.id === userId ? { ...e, twoFactorEnabled: enabled } : e));
     updateEmployeeList(updated);
     logSecurityEvent('UPDATE', 'Employee', userId, `Autenticação em Dois Fatores (2FA) ${enabled ? 'ativada' : 'desativada'} para o colaborador.`);
+
+    // Persist to backend
+    fetch(`/api/employees/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ twoFactorEnabled: enabled })
+    }).catch(err => console.error('Failed to update 2FA status on backend', err));
   }, [employees, logSecurityEvent, updateEmployeeList]);
 
   const unlockUser = useCallback((userId: string) => {

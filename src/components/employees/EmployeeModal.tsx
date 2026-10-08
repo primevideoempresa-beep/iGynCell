@@ -4,7 +4,6 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Modal } from '../common/Modal';
 import { formatPhone } from '../../utils/formatters';
-import { QRCodeSVG } from 'qrcode.react';
 import { 
   Users, 
   ShieldCheck, 
@@ -16,8 +15,6 @@ import {
   Trash2, 
   AlertTriangle, 
   Check,
-  QrCode,
-  Copy,
   CheckCircle2,
   Unlock,
   X
@@ -66,10 +63,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
     'commissions',
     'notifications'
   ]);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [twoFactorSecret, setTwoFactorSecret] = useState('');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-  const [copiedSecret, setCopiedSecret] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -110,8 +104,6 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
       setCommissionRateSales(employeeToEdit.commissionRateSales);
       setCommissionRateTech(employeeToEdit.commissionRateTech);
       setAllowedTabs(employeeToEdit.allowedTabs);
-      setTwoFactorEnabled(!!employeeToEdit.twoFactorEnabled);
-      setTwoFactorSecret(employeeToEdit.twoFactorSecret || '');
     } else {
       setName('');
       setEmail('');
@@ -124,27 +116,8 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
       setCommissionRateSales(5);
       setCommissionRateTech(0);
       setAllowedTabs(['dashboard', 'sales', 'clients', 'commissions', 'notifications']);
-      setTwoFactorEnabled(false);
-      setTwoFactorSecret('');
     }
   }, [employeeToEdit, isOpen]);
-
-  const generateSecret = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    let secret = '';
-    for (let i = 0; i < 16; i++) {
-      secret += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setTwoFactorSecret(secret);
-  };
-
-  const handleCopySecret = () => {
-    navigator.clipboard.writeText(twoFactorSecret);
-    setCopiedSecret(true);
-    setTimeout(() => setCopiedSecret(false), 2000);
-  };
-
-  const otpAuthUri = `otpauth://totp/iGynCell:${email || 'colaborador'}?secret=${twoFactorSecret}&issuer=iGynCell`;
 
   const handleDelete = () => {
     if (!employeeToEdit) return;
@@ -209,9 +182,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
         status,
         commissionRateSales,
         commissionRateTech,
-        allowedTabs,
-        twoFactorEnabled,
-        twoFactorSecret
+        allowedTabs
       });
     } else {
       addEmployee({
@@ -225,9 +196,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
         status,
         commissionRateSales,
         commissionRateTech,
-        allowedTabs,
-        twoFactorEnabled,
-        twoFactorSecret
+        allowedTabs
       });
     }
 
@@ -431,74 +400,6 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
               className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-cyan-400 font-bold outline-none focus:border-cyan-500 font-mono disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
-        </div>
-
-        {/* Two-Factor Authentication (2FA) Section */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-cyan-400" />
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider">Segurança: Autenticação de 2 Fatores (2FA)</h3>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input 
-                type="checkbox" 
-                className="sr-only peer"
-                checked={twoFactorEnabled}
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  setTwoFactorEnabled(enabled);
-                  if (enabled && !twoFactorSecret) {
-                    generateSecret();
-                  }
-                }}
-              />
-              <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
-              <span className="ml-2 text-2xs font-medium text-slate-400">{twoFactorEnabled ? 'Ativado' : 'Desativado'}</span>
-            </label>
-          </div>
-
-          {twoFactorEnabled && (
-            <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-950/80 p-4 rounded-xl border border-slate-800/50">
-              <div className="bg-white p-2 rounded-lg shrink-0">
-                <QRCodeSVG 
-                  value={otpAuthUri} 
-                  size={120}
-                  level="H"
-                  includeMargin={false}
-                />
-              </div>
-              
-              <div className="flex-1 space-y-3">
-                <div>
-                  <p className="text-2xs font-bold text-white mb-1">Passo 1: Escaneie o QR Code</p>
-                  <p className="text-[10px] text-slate-400 leading-relaxed">
-                    Use o Google Authenticator ou similar para escanear a imagem ao lado.
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <p className="text-2xs font-bold text-white">Passo 2: Ou use a Chave de Configuração</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 font-mono text-xs text-cyan-400 font-bold tracking-widest truncate">
-                      {twoFactorSecret}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleCopySecret}
-                      className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-                      title="Copiar chave"
-                    >
-                      {copiedSecret ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-500 italic">
-                    Insira esta chave manualmente no app se não conseguir escanear o QR Code.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Permitted Modules Checklist */}
