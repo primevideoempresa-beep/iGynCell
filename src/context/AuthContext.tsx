@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Employee, UserRole, ViewTab, AuditLog } from '../types';
 import { initialEmployees } from '../data/initialData';
 import * as OTPAuth from 'otpauth';
+import { getApiBaseUrl, apiSetup2FA, apiConfirm2FA, apiDisable2FA } from '../services/api';
 
 export interface LoginResult {
   success: boolean;
@@ -28,6 +29,9 @@ interface AuthContextType {
   auditLogs: AuditLog[];
   fetchAuditLogs: () => Promise<AuditLog[]>;
   toggle2FAForUser: (userId: string, enabled: boolean) => void;
+  setup2FA: (userId: string) => Promise<{ secret: string; qrCodeUri: string }>;
+  confirm2FA: (userId: string, secret: string, code: string) => Promise<boolean>;
+  disable2FA: (userId: string) => Promise<boolean>;
   unlockUser: (userId: string) => void;
 }
 
@@ -215,132 +219,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentUser, auditLogs]);
 
   const login = useCallback(async (email: string, pass: string, twoFactorCode?: string): Promise<LoginResult> => {
-    const trimmedEmail = email.trim().toLowerCase();
-    const user = employees.find(
-      e => e.email.toLowerCase() === trimmedEmail && e.status === 'active'
-    );
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/auth.php?action=login`
+      : `${baseUrl}/auth/login`;
 
-    if (!user) {
-      logSecurityEvent('LOGIN_FAILED', 'Auth', undefined, `Tentativa de login com e-mail inexistente: ${trimmedEmail}`);
-      return { success: false, error: 'Credenciais inválidas ou colaborador inativo.' };
-    }
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass, twoFactorCode })
+      });
 
-    // Check Lockout
-    if (user.lockoutUntil && new Date(user.lockoutUntil).getTime() > Date.now()) {
-      const secondsLeft = Math.ceil((new Date(user.lockoutUntil).getTime() - Date.now()) / 1000);
-      return { success: false, error: `Conta bloqueada temporariamente. Tente novamente em ${secondsLeft} segundos.` };
-    }
+      const data = await response.json();
 
-    // Check password
-    const isPassValid = user.password === pass;
-    if (!isPassValid) {
-      const failedAttempts = (user.failedLoginAttempts || 0) + 1;
-      const lockoutUntil = failedAttempts >= 5 ? new Date(Date.now() + 15 * 1000).toISOString() : undefined;
-
-      const updatedUsers = employees.map(e =>
-        e.id === user.id ? { ...e, failedLoginAttempts: failedAttempts, lockoutUntil } : e
+      if (data.success) {
+        setSessionToken(data.token);
+        setCurrentUserId(data.user.id);
+        setIsAwaiting2FA(false);
+        setPendingUser2FA(null);
+        return { success: true, user: data.user };
+      } else if (data.requires2FA) {
+        setPendingUser2FA(data.user || employees.find(e => e.id === data.userId) || null);
+        setIsAwaiting2FA(true);
+        return { success: false, requires2FA: true };
+      } else {
+        return { success: false, error: data.error || 'Erro ao realizar login.' };
+      }
+    } catch (err: any) {
+      // Fallback local if backend fails and not configured
+      console.warn('Backend login failed, using local fallback:', err);
+      
+      const trimmedEmail = email.trim().toLowerCase();
+      const user = employees.find(
+        e => e.email.toLowerCase() === trimmedEmail && e.status === 'active'
       );
-      updateEmployeeList(updatedUsers);
 
-      logSecurityEvent('LOGIN_FAILED', 'Auth', user.id, `Senha incorreta para ${user.name} (${failedAttempts}/5)`);
+      if (!user) return { success: false, error: 'Credenciais inválidas.' };
+      if (user.password !== pass) return { success: false, error: 'Senha incorreta.' };
 
-      if (failedAttempts >= 5) {
-        return { success: false, error: 'Limite de 5 tentativas excedido. Conta bloqueada por 15 segundos.' };
+      const requires2FA = user.twoFactorEnabled || user.role === 'admin';
+      if (requires2FA && !twoFactorCode) {
+        setPendingUser2FA(user);
+        setIsAwaiting2FA(true);
+        return { success: false, requires2FA: true, user };
       }
-      return { success: false, error: `Senha incorreta. Restam ${5 - failedAttempts} tentativa(s).` };
+
+      setSessionToken(`local_token_${user.id}`);
+      setCurrentUserId(user.id);
+      return { success: true, user };
     }
-
-    // 2FA Requirement for Admin or if activated
-    const requires2FA = user.twoFactorEnabled || user.role === 'admin';
-    if (requires2FA && !twoFactorCode) {
-      setPendingUser2FA(user);
-      setIsAwaiting2FA(true);
-      return { success: false, requires2FA: true, user };
-    }
-
-    if (requires2FA && twoFactorCode) {
-      if (user.twoFactorSecret) {
-        const totp = new OTPAuth.TOTP({
-          issuer: 'iGynCell',
-          label: user.email,
-          algorithm: 'SHA1',
-          digits: 6,
-          period: 30,
-          secret: user.twoFactorSecret,
-        });
-
-        const delta = totp.validate({
-          token: twoFactorCode,
-          window: 1,
-        });
-
-        if (delta === null && twoFactorCode !== '123456') {
-          return { success: false, error: 'Código 2FA incorreto. Verifique seu app autenticador.' };
-        }
-      } else if (twoFactorCode !== '123456') {
-        return { success: false, error: 'Código 2FA incorreto. Verifique seu app autenticador.' };
-      }
-    }
-
-    // Successful login
-    const newToken = `token_${Date.now()}_${user.id}`;
-    setSessionToken(newToken);
-    setCurrentUserId(user.id);
-    setIsAwaiting2FA(false);
-    setPendingUser2FA(null);
-
-    // Reset failed attempts
-    const updatedUsers = employees.map(e =>
-      e.id === user.id ? { ...e, failedLoginAttempts: 0, lockoutUntil: undefined, lastLogin: new Date().toISOString() } : e
-    );
-    updateEmployeeList(updatedUsers);
-
-    logSecurityEvent('LOGIN', 'Auth', user.id, `Login autenticado com sucesso para ${user.name} (${user.roleLabel})`);
-
-    return { success: true, user };
-  }, [employees, logSecurityEvent, updateEmployeeList]);
+  }, [employees]);
 
   const verify2FA = useCallback(async (code: string): Promise<boolean> => {
     if (!pendingUser2FA) return false;
     
-    let isValid = false;
-    if (pendingUser2FA.twoFactorSecret) {
-      const totp = new OTPAuth.TOTP({
-        issuer: 'iGynCell',
-        label: pendingUser2FA.email,
-        algorithm: 'SHA1',
-        digits: 6,
-        period: 30,
-        secret: pendingUser2FA.twoFactorSecret,
-      });
-
-      const delta = totp.validate({
-        token: code,
-        window: 1,
-      });
-      isValid = delta !== null || code === '123456';
-    } else {
-      isValid = code === '123456';
-    }
-
-    if (isValid) {
-      const user = pendingUser2FA;
-      const newToken = `token_${Date.now()}_${user.id}`;
-      setSessionToken(newToken);
-      setCurrentUserId(user.id);
-      setIsAwaiting2FA(false);
-      setPendingUser2FA(null);
-
-      const updatedUsers = employees.map(e =>
-        e.id === user.id ? { ...e, failedLoginAttempts: 0, lockoutUntil: undefined, lastLogin: new Date().toISOString() } : e
-      );
-      updateEmployeeList(updatedUsers);
-
-      logSecurityEvent('LOGIN', 'Auth', user.id, `Login 2FA validado com sucesso para ${user.name}`);
-      return true;
-    }
-    return false;
-  }, [pendingUser2FA, employees, logSecurityEvent, updateEmployeeList]);
+    const result = await login(pendingUser2FA.email, pendingUser2FA.password || '123456', code);
+    return result.success;
+  }, [pendingUser2FA, login]);
 
   const cancel2FA = useCallback(() => {
     setIsAwaiting2FA(false);
@@ -381,6 +317,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       body: JSON.stringify({ twoFactorEnabled: enabled })
     }).catch(err => console.error('Failed to update 2FA status on backend', err));
   }, [employees, logSecurityEvent, updateEmployeeList]);
+
+  const setup2FA = useCallback(async (userId: string) => {
+    const res = await apiSetup2FA(userId);
+    if (res.success && res.secret && res.qrCodeUri) {
+      return { secret: res.secret, qrCodeUri: res.qrCodeUri };
+    }
+    throw new Error(res.error || 'Erro ao iniciar setup 2FA');
+  }, []);
+
+  const confirm2FA = useCallback(async (userId: string, secret: string, code: string) => {
+    const res = await apiConfirm2FA(userId, secret, code);
+    if (res.success) {
+      // Atualizar lista local de colaboradores para refletir que 2FA está ativo
+      const updated = employees.map(e => (e.id === userId ? { ...e, twoFactorEnabled: true, twoFactorSecret: secret } : e));
+      updateEmployeeList(updated);
+      return true;
+    }
+    return false;
+  }, [employees, updateEmployeeList]);
+
+  const disable2FA = useCallback(async (userId: string) => {
+    const res = await apiDisable2FA(userId);
+    if (res.success) {
+      const updated = employees.map(e => (e.id === userId ? { ...e, twoFactorEnabled: false, twoFactorSecret: undefined } : e));
+      updateEmployeeList(updated);
+      return true;
+    }
+    return false;
+  }, [employees, updateEmployeeList]);
 
   const unlockUser = useCallback((userId: string) => {
     const updated = employees.map(e => 
@@ -425,6 +390,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         auditLogs,
         fetchAuditLogs,
         toggle2FAForUser,
+        setup2FA,
+        confirm2FA,
+        disable2FA,
         unlockUser
       }}
     >

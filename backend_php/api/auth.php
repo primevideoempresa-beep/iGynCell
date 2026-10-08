@@ -73,11 +73,18 @@ switch ($action) {
             ], 200);
         }
 
-        // Se informou código 2FA, validar (código de 6 dígitos)
+        // Se informou código 2FA, validar usando TOTP
         if ($is2FARequired && !empty($twoFactorCode)) {
-            $validCode = '123456'; // Código padrão mestre ou validação de TOTP
-            if (strlen($twoFactorCode) !== 6) {
-                sendError('Código 2FA inválido. Digite os 6 dígitos do autenticador.', 401);
+            $secret = $user['twoFactorSecret'] ?? null;
+            if (empty($secret)) {
+                // Se não tem secret mas é admin, pode estar usando código mestre ou erro de config
+                if ($twoFactorCode !== '123456') {
+                    sendError('Configuração 2FA ausente para este usuário.', 400);
+                }
+            } else {
+                if (!verifyTOTP($secret, $twoFactorCode)) {
+                    sendError('Código 2FA incorreto ou expirado.', 401);
+                }
             }
         }
 
@@ -121,6 +128,73 @@ switch ($action) {
         break;
 
     // ------------------------------------------------------------------------
+    // SETUP 2FA: GERAR SECRET
+    // ------------------------------------------------------------------------
+    case 'setup_2fa':
+        $userId = $_GET['userId'] ?? null;
+        if (!$userId) sendError('ID do usuário necessário');
+
+        $stmt = $pdo->prepare("SELECT `email` FROM `employees` WHERE `id` = :id LIMIT 1");
+        $stmt->execute(['id' => $userId]);
+        $user = $stmt->fetch();
+        if (!$user) sendError('Usuário não encontrado');
+
+        // Gerar secret aleatório em Base32 (16 chars)
+        $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+        $secret = '';
+        for ($i = 0; $i < 16; $i++) {
+            $secret .= $chars[rand(0, 31)];
+        }
+
+        sendJson([
+            'success' => true,
+            'secret' => $secret,
+            'qrCodeUri' => "otpauth://totp/iGynCell:{$user['email']}?secret={$secret}&issuer=iGynCell"
+        ]);
+        break;
+
+    // ------------------------------------------------------------------------
+    // CONFIRMAR 2FA: VALIDAR CÓDIGO E ATIVAR
+    // ------------------------------------------------------------------------
+    case 'confirm_2fa':
+        if ($method !== 'POST') sendError('Método inválido', 405);
+        $data = getJsonBody();
+        $userId = $data['userId'] ?? null;
+        $secret = $data['secret'] ?? null;
+        $code = $data['code'] ?? null;
+
+        if (!$userId || !$secret || !$code) sendError('Dados incompletos', 400);
+
+        if (verifyTOTP($secret, $code)) {
+            $pdo->prepare("UPDATE `employees` SET `twoFactorEnabled` = 1, `twoFactorSecret` = :secret WHERE `id` = :id")
+                ->execute(['secret' => $secret, 'id' => $userId]);
+
+            logAudit($pdo, $userId, 'Colaborador', 'unknown', 'UPDATE', 'Auth', $userId, "Autenticação 2FA ativada com sucesso");
+
+            sendJson(['success' => true, 'message' => '2FA ativado com sucesso!']);
+        } else {
+            sendError('Código de confirmação inválido ou expirado.', 400);
+        }
+        break;
+
+    // ------------------------------------------------------------------------
+    // DESATIVAR 2FA
+    // ------------------------------------------------------------------------
+    case 'disable_2fa':
+        if ($method !== 'POST') sendError('Método inválido', 405);
+        $data = getJsonBody();
+        $userId = $data['userId'] ?? null;
+        if (!$userId) sendError('ID necessário');
+
+        $pdo->prepare("UPDATE `employees` SET `twoFactorEnabled` = 0, `twoFactorSecret` = NULL WHERE `id` = :id")
+            ->execute(['id' => $userId]);
+
+        logAudit($pdo, $userId, 'Colaborador', 'unknown', 'UPDATE', 'Auth', $userId, "Autenticação 2FA desativada");
+
+        sendJson(['success' => true, 'message' => '2FA desativado.']);
+        break;
+
+    // ------------------------------------------------------------------------
     // RECUPERAÇÃO DE SENHA COM TOKEN TEMPORÁRIO
     // ------------------------------------------------------------------------
     case 'forgot_password':
@@ -153,4 +227,65 @@ switch ($action) {
 
     default:
         sendError('Ação desconhecida', 404);
+}
+
+/**
+ * Validação simplificada de TOTP (RFC 6238)
+ */
+function verifyTOTP($secret, $code) {
+    if (strlen($code) !== 6) return false;
+
+    $secret = strtoupper($secret);
+    $secretKey = base32_decode($secret);
+
+    // Janelas de tempo (atual, anterior e próxima para tolerância)
+    $timeWindow = floor(time() / 30);
+
+    for ($i = -1; $i <= 1; $i++) {
+        $time = pack('N*', 0) . pack('N*', $timeWindow + $i);
+        $hash = hash_hmac('sha1', $time, $secretKey, true);
+        $offset = ord($hash[19]) & 0xf;
+        $otp = (
+            ((ord($hash[$offset + 0]) & 0x7f) << 24) |
+            ((ord($hash[$offset + 1]) & 0xff) << 16) |
+            ((ord($hash[$offset + 2]) & 0xff) << 8) |
+            (ord($hash[$offset + 3]) & 0xff)
+        ) % 1000000;
+
+        if (str_pad($otp, 6, '0', STR_PAD_LEFT) === $code) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Decoder Base32 para PHP
+ */
+function base32_decode($base32) {
+    $base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $base32charsFlipped = array_flip(str_split($base32chars));
+
+    $output = '';
+    $i = 0;
+    $buffer = 0;
+    $bufferLength = 0;
+
+    while ($i < strlen($base32)) {
+        $char = $base32[$i];
+        if ($char === '=') break;
+        if (!isset($base32charsFlipped[$char])) {
+            $i++;
+            continue;
+        }
+        $buffer <<= 5;
+        $buffer |= $base32charsFlipped[$char];
+        $bufferLength += 5;
+        if ($bufferLength >= 8) {
+            $output .= chr(($buffer >> ($bufferLength - 8)) & 0xff);
+            $bufferLength -= 8;
+        }
+        $i++;
+    }
+    return $output;
 }

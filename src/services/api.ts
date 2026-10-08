@@ -301,6 +301,65 @@ export const apiDeleteOrder = async (id: string): Promise<{ success: boolean; er
 };
 
 /**
+ * Solicita configuração de 2FA (gera secret e QR Code)
+ */
+export const apiSetup2FA = async (userId: string): Promise<{ success: boolean; secret?: string; qrCodeUri?: string; error?: string }> => {
+  const baseUrl = getApiBaseUrl();
+  const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+    ? `${baseUrl}/auth.php?action=setup_2fa&userId=${encodeURIComponent(userId)}`
+    : `${baseUrl}/auth/setup-2fa/${userId}`;
+
+  try {
+    const res = await fetch(endpoint, { headers: { 'Accept': 'application/json' } });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Confirma e ativa o 2FA com o código digitado
+ */
+export const apiConfirm2FA = async (userId: string, secret: string, code: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+  const baseUrl = getApiBaseUrl();
+  const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+    ? `${baseUrl}/auth.php?action=confirm_2fa`
+    : `${baseUrl}/auth/confirm-2fa`;
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ userId, secret, code })
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Desativa o 2FA para um usuário
+ */
+export const apiDisable2FA = async (userId: string): Promise<{ success: boolean; error?: string }> => {
+  const baseUrl = getApiBaseUrl();
+  const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+    ? `${baseUrl}/auth.php?action=disable_2fa`
+    : `${baseUrl}/auth/disable-2fa`;
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ userId })
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+};
+
+/**
  * Exclui um Cliente do banco de dados
  */
 export const apiDeleteClient = async (id: string): Promise<{ success: boolean; error?: string }> => {
