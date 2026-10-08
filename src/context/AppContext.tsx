@@ -98,9 +98,9 @@ interface AppContextType {
   markCommissionPaid: (id: string) => void;
 
   employees: Employee[];
-  addEmployee: (employee: Omit<Employee, 'id' | 'createdAt'>) => Employee;
-  updateEmployee: (id: string, updates: Partial<Employee>) => void;
-  deleteEmployee: (id: string) => void;
+  addEmployee: (employee: Omit<Employee, 'id' | 'createdAt'>) => Promise<Employee>;
+  updateEmployee: (id: string, updates: Partial<Employee>) => Promise<void>;
+  deleteEmployee: (id: string) => Promise<void>;
 
   notifications: NotificationItem[];
   markNotificationRead: (id: string) => void;
@@ -119,7 +119,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const BROADCAST_CHANNEL_NAME = 'igyn_cell_realtime_sync_channel';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { updateEmployeeList } = useAuth();
+  const { employees, addEmployee, updateEmployee, deleteEmployee, updateEmployeeList } = useAuth();
   const [currentTab, setCurrentTab] = useState<ViewTab>('dashboard');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
@@ -205,15 +205,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    try {
-      const saved = localStorage.getItem('igyn_cell_employees');
-      return saved ? JSON.parse(saved) : initialEmployees;
-    } catch {
-      return initialEmployees;
-    }
-  });
-
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     try {
       const saved = localStorage.getItem('igyn_cell_notifications');
@@ -271,7 +262,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (data.financialEntries) setFinancialEntries(data.financialEntries);
         if (data.commissions) setCommissions(data.commissions);
         if (data.employees) {
-          setEmployees(data.employees);
           updateEmployeeList(data.employees);
         }
         if (data.notifications) setNotifications(data.notifications);
@@ -313,7 +303,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (p.financialEntries) setFinancialEntries(p.financialEntries);
               if (p.commissions) setCommissions(p.commissions);
               if (p.employees) {
-                setEmployees(p.employees);
                 updateEmployeeList(p.employees);
               }
               if (p.notifications) setNotifications(p.notifications);
@@ -352,7 +341,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (payload.financialEntries) setFinancialEntries(payload.financialEntries);
         if (payload.commissions) setCommissions(payload.commissions);
         if (payload.employees) {
-          setEmployees(payload.employees);
           updateEmployeeList(payload.employees);
         }
         if (payload.notifications) setNotifications(payload.notifications);
@@ -416,12 +404,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     try {
-      localStorage.setItem('igyn_cell_employees', JSON.stringify(employees));
-    } catch {}
-  }, [employees]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem('igyn_cell_notifications', JSON.stringify(notifications));
     } catch {}
   }, [notifications]);
@@ -449,7 +431,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSales(initialSales);
     setFinancialEntries(initialFinancialEntries);
     setCommissions(initialCommissions);
-    setEmployees(initialEmployees);
     setNotifications(initialNotifications);
     updateEmployeeList(initialEmployees);
 
@@ -1028,55 +1009,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     notifyBroadcast('COMMISSION_PAID', { id });
     fetch(`/api/commissions/${id}/pay`, { method: 'POST' }).catch(() => {});
-  };
-
-  // Employees CRUD
-  const addEmployee = (empData: Omit<Employee, 'id' | 'createdAt'>): Employee => {
-    const maxId = employees.reduce((max, emp) => {
-      const idNum = parseInt(emp.id.split('-')[1]);
-      return idNum > max ? idNum : max;
-    }, 0);
-    const newId = `emp-${maxId + 1}`;
-    const now = new Date().toISOString();
-    const newEmp: Employee = {
-      ...empData,
-      id: newId,
-      createdAt: now
-    };
-    const updated = [newEmp, ...employees];
-    setEmployees(updated);
-    updateEmployeeList(updated);
-    notifyBroadcast('EMPLOYEE_ADDED', { employee: newEmp });
-    fetch('/api/employees', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(empData)
-    }).catch(() => {});
-    return newEmp;
-  };
-
-  const updateEmployee = (id: string, updates: Partial<Employee>) => {
-    const updated = employees.map(e => (e.id === id ? { ...e, ...updates } : e));
-    setEmployees(updated);
-    updateEmployeeList(updated);
-    notifyBroadcast('EMPLOYEE_UPDATED', { id, updates });
-    fetch(`/api/employees/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
-    }).catch(() => {});
-  };
-
-  const deleteEmployee = async (id: string) => {
-    const updated = employees.filter(e => e.id !== id);
-    setEmployees(updated);
-    updateEmployeeList(updated);
-    notifyBroadcast('EMPLOYEE_DELETED', { id });
-    try {
-      await apiDeleteEmployee(id);
-    } catch (e) {
-      console.warn('Erro ao excluir colaborador no backend:', e);
-    }
   };
 
   // Notifications

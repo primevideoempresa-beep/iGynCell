@@ -34,6 +34,10 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
 }) => {
   const { addEmployee, updateEmployee, deleteEmployee } = useApp();
   const { currentUser, isRole, unlockUser, setup2FA, confirm2FA, disable2FA } = useAuth();
+  const { employees: allEmployees } = useApp();
+
+  // Get current state of employeeToEdit from the global list to keep UI in sync
+  const currentEmployee = allEmployees.find(e => e.id === employeeToEdit?.id) || employeeToEdit;
 
   const isAdmin = isRole(['admin', 'manager']);
   const isEditingSelf = employeeToEdit?.id === currentUser?.id;
@@ -453,15 +457,15 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
         </div>
 
         {/* Two-Factor Authentication (2FA) Section */}
-        {employeeToEdit && (
+        {currentEmployee && (
           <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <ShieldCheck className={`h-5 w-5 ${employeeToEdit.twoFactorEnabled ? 'text-emerald-400' : 'text-slate-500'}`} />
+                <ShieldCheck className={`h-5 w-5 ${currentEmployee.twoFactorEnabled ? 'text-emerald-400' : 'text-slate-500'}`} />
                 <div>
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider">Autenticação de Dois Fatores (2FA)</h3>
                   <div className="flex items-center gap-2 mt-0.5">
-                    {employeeToEdit.twoFactorEnabled ? (
+                    {currentEmployee.twoFactorEnabled ? (
                       <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         ATIVADO
@@ -476,7 +480,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
                 </div>
               </div>
 
-              {!employeeToEdit.twoFactorEnabled ? (
+              {!currentEmployee.twoFactorEnabled ? (
                 !isSettingUp2FA ? (
                   <button
                     type="button"

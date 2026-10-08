@@ -69,7 +69,12 @@ switch ($action) {
                 'success' => false,
                 'requires2FA' => true,
                 'userId' => $user['id'],
-                'message' => 'Autenticação em Dois Fatores (2FA) necessária para este cargo.'
+                'user' => [
+                    'id' => $user['id'],
+                    'name' => $user['name'],
+                    'avatar' => $user['avatar']
+                ],
+                'message' => 'Autenticação em Dois Fatores (2FA) necessária.'
             ], 200);
         }
 
