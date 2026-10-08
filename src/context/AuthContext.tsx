@@ -130,6 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [isAwaiting2FA, setIsAwaiting2FA] = useState<boolean>(false);
   const [pendingUser2FA, setPendingUser2FA] = useState<Employee | null>(null);
+  const [pendingCredentials, setPendingCredentials] = useState<{ email: string; pass: string } | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   // Cross-tab Real-time Broadcast Channel
@@ -214,7 +215,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuditLogs(prev => [newLog, ...prev]);
 
     // Send to backend
-    fetch('/api/audit', {
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/audit.php`
+      : `${baseUrl}/audit`;
+
+    fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newLog)
@@ -223,7 +229,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchAuditLogs = useCallback(async (): Promise<AuditLog[]> => {
     try {
-      const res = await fetch('/api/audit', {
+      const baseUrl = getApiBaseUrl();
+      const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+        ? `${baseUrl}/audit.php`
+        : `${baseUrl}/audit`;
+
+      const res = await fetch(endpoint, {
         headers: {
           'X-User-Role': currentUser?.role || 'admin',
           'X-User-Id': currentUser?.id || 'emp-1'
@@ -260,9 +271,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUserId(data.user.id);
         setIsAwaiting2FA(false);
         setPendingUser2FA(null);
+        setPendingCredentials(null);
         return { success: true, user: data.user };
       } else if (data.requires2FA) {
         setPendingUser2FA(data.user || employees.find(e => e.id === data.userId) || null);
+        setPendingCredentials({ email, pass });
         setIsAwaiting2FA(true);
         return { success: false, requires2FA: true };
       } else {
@@ -296,7 +309,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             algorithm: 'SHA1',
             digits: 6,
             period: 30,
-            secret: user.twoFactorSecret,
+            secret: OTPAuth.Secret.fromBase32(user.twoFactorSecret),
           });
           const delta = totp.validate({ token: twoFactorCode, window: 1 });
           isValid = delta !== null;
@@ -317,15 +330,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [employees]);
 
   const verify2FA = useCallback(async (code: string): Promise<boolean> => {
-    if (!pendingUser2FA) return false;
+    if (!pendingCredentials) return false;
     
-    const result = await login(pendingUser2FA.email, pendingUser2FA.password || '123456', code);
+    const result = await login(pendingCredentials.email, pendingCredentials.pass, code);
     return result.success;
-  }, [pendingUser2FA, login]);
+  }, [pendingCredentials, login]);
 
   const cancel2FA = useCallback(() => {
     setIsAwaiting2FA(false);
     setPendingUser2FA(null);
+    setPendingCredentials(null);
   }, []);
 
   const switchUser = useCallback((id: string) => {
@@ -356,7 +370,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logSecurityEvent('UPDATE', 'Employee', userId, `Autenticação em Dois Fatores (2FA) ${enabled ? 'ativada' : 'desativada'} para o colaborador.`);
 
     // Persist to backend
-    fetch(`/api/employees/${userId}`, {
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/employees.php?id=${encodeURIComponent(userId)}`
+      : `${baseUrl}/employees/${userId}`;
+
+    fetch(endpoint, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ twoFactorEnabled: enabled })
@@ -381,7 +400,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     notifyBroadcast('EMPLOYEE_ADDED', { employee: newEmp });
     
-    fetch('/api/employees', {
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/employees.php`
+      : `${baseUrl}/employees`;
+
+    fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(empData)
@@ -397,7 +421,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     notifyBroadcast('EMPLOYEE_UPDATED', { id, updates });
     
-    fetch(`/api/employees/${id}`, {
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/employees.php?id=${encodeURIComponent(id)}`
+      : `${baseUrl}/employees/${id}`;
+
+    fetch(endpoint, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -411,7 +440,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     notifyBroadcast('EMPLOYEE_DELETED', { id });
     
-    fetch(`/api/employees/${id}`, { method: 'DELETE' }).catch(() => {});
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/employees.php?id=${encodeURIComponent(id)}`
+      : `${baseUrl}/employees/${id}`;
+
+    fetch(endpoint, { method: 'DELETE' }).catch(() => {});
   }, [employees, updateEmployeeList, notifyBroadcast]);
 
   const setup2FA = useCallback(async (userId: string) => {

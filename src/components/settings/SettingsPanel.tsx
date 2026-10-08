@@ -18,10 +18,13 @@ import {
   HardDrive,
   Code2,
   ExternalLink,
-  Save
+  Save,
+  Lock,
+  QrCode
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { QRCodeSVG } from 'qrcode.react';
 import { testBackendConnection, BackendConnectionTestResult } from '../../services/api';
 
 export const SettingsPanel: React.FC = () => {
@@ -67,6 +70,61 @@ export const SettingsPanel: React.FC = () => {
   const [showSetupGuide, setShowSetupGuide] = useState(false);
 
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // 2FA Setup State for Current User
+  const [isSettingUp2FA, setIsSettingUp2FA] = useState(false);
+  const [twoFactorSecret, setTwoFactorSecret] = useState('');
+  const [qrCodeUri, setQrCodeUri] = useState('');
+  const [confirmationCode, setConfirmationCode] = useState('');
+  const [twoFactorError, setTwoFactorError] = useState('');
+  const [isConfirming2FA, setIsConfirming2FA] = useState(false);
+
+  const handleStartSetup2FA = async () => {
+    setTwoFactorError('');
+    try {
+      if (!userData) return;
+      const { secret, qrCodeUri } = await setup2FA(userData.id);
+      setTwoFactorSecret(secret);
+      setQrCodeUri(qrCodeUri);
+      setIsSettingUp2FA(true);
+    } catch (err: any) {
+      setTwoFactorError(err.message);
+    }
+  };
+
+  const handleConfirmActivation = async () => {
+    setTwoFactorError('');
+    setIsConfirming2FA(true);
+    try {
+      if (!userData) return;
+      const ok = await confirm2FA(userData.id, twoFactorSecret, confirmationCode);
+      if (ok) {
+        setIsSettingUp2FA(false);
+        setConfirmationCode('');
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 3000);
+      } else {
+        setTwoFactorError('Código incorreto. Tente novamente.');
+      }
+    } catch (err: any) {
+      setTwoFactorError(err.message);
+    } finally {
+      setIsConfirming2FA(false);
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    if (!userData) return;
+    if (confirm('Tem certeza que deseja desativar a proteção 2FA para sua conta?')) {
+      const ok = await disable2FA(userData.id);
+      if (ok) {
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 3000);
+      } else {
+        alert('Erro ao desativar 2FA.');
+      }
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -495,6 +553,121 @@ export const SettingsPanel: React.FC = () => {
               />
             </div>
           </div>
+        </div>
+
+        {/* Security / 2FA Section */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="rounded-xl bg-rose-500/20 border border-rose-500/40 p-2 text-rose-400">
+                <Lock className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Segurança & Autenticação de Dois Fatores (2FA)</h3>
+                <p className="text-2xs text-slate-400">Proteja seu acesso usando aplicativos como Google Authenticator ou Authy.</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {userData?.twoFactorEnabled ? (
+                <div className="flex flex-col items-end">
+                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-xs font-bold text-emerald-400 mb-2">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    2FA ATIVADO
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleDisable2FA}
+                    className="text-[10px] font-bold text-rose-400 hover:text-rose-300 underline underline-offset-4"
+                  >
+                    Desativar Proteção
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-end">
+                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-xs font-bold text-rose-400 mb-2">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    2FA DESATIVADO
+                  </span>
+                  {!isSettingUp2FA && (
+                    <button
+                      type="button"
+                      onClick={handleStartSetup2FA}
+                      className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-bold text-white hover:bg-cyan-500 transition shadow-lg shadow-cyan-950/40"
+                    >
+                      Ativar 2FA Agora
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {isSettingUp2FA && !userData?.twoFactorEnabled && (
+            <div className="mt-4 bg-slate-950/80 p-6 rounded-2xl border border-cyan-500/30 space-y-6 animate-in slide-in-from-top-2 duration-300">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                <div className="flex flex-col items-center space-y-3">
+                  <div className="bg-white p-3 rounded-2xl shadow-2xl">
+                    <QRCodeSVG value={qrCodeUri} size={160} level="H" />
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-medium">Escaneie com seu App de Autenticação</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 text-[10px] text-slate-950">1</span>
+                      Configuração Manual
+                    </h4>
+                    <p className="text-2xs text-slate-400 leading-relaxed">
+                      Se não puder escanear, insira esta chave manualmente no seu aplicativo:
+                    </p>
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 font-mono text-sm text-cyan-400 font-bold tracking-[0.2em] text-center shadow-inner">
+                      {twoFactorSecret}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 text-[10px] text-slate-950">2</span>
+                      Confirme o Código
+                    </h4>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={confirmationCode}
+                        onChange={e => setConfirmationCode(e.target.value.replace(/\D/g, ''))}
+                        placeholder="000 000"
+                        className="flex-1 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-base font-mono font-bold tracking-[0.4em] text-center text-white outline-none focus:border-cyan-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={confirmationCode.length < 6 || isConfirming2FA}
+                        onClick={handleConfirmActivation}
+                        className="rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition disabled:opacity-40 shadow-lg shadow-emerald-950/20"
+                      >
+                        {isConfirming2FA ? 'Validando...' : 'Ativar'}
+                      </button>
+                    </div>
+                    {twoFactorError && (
+                      <p className="text-2xs font-bold text-rose-400 bg-rose-400/10 px-3 py-1.5 rounded-lg border border-rose-400/20">{twoFactorError}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSettingUp2FA(false)}
+                  className="text-2xs font-bold text-slate-500 hover:text-white transition"
+                >
+                  Cancelar Setup
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Submit */}
