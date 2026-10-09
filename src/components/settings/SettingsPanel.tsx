@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   Building2,
@@ -18,11 +18,14 @@ import {
   HardDrive,
   Code2,
   ExternalLink,
-  Save
+  Save,
+  Smartphone
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { testBackendConnection, BackendConnectionTestResult } from '../../services/api';
+import { formatPhone } from '../../utils/formatters';
+import { TwoFactorModal } from '../auth/TwoFactorModal';
 
 export const SettingsPanel: React.FC = () => {
   const {
@@ -45,20 +48,27 @@ export const SettingsPanel: React.FC = () => {
     syncWithDatabase,
     isSyncing
   } = useApp();
-  const { isRole } = useAuth();
+  const { isRole, currentUser } = useAuth();
 
+  const [isTwoFactorModalOpen, setIsTwoFactorModalOpen] = useState(false);
   const [storeName, setStoreName] = useState(settings.storeName);
   const [tradeName, setTradeName] = useState(settings.tradeName);
   const [address, setAddress] = useState(settings.address);
   const [locationDetails, setLocationDetails] = useState(settings.locationDetails);
   const [cityState, setCityState] = useState(settings.cityState);
   const [postalCode, setPostalCode] = useState(settings.postalCode);
-  const [phone, setPhone] = useState(settings.phone);
+  const [phone, setPhone] = useState(formatPhone(settings.phone || ''));
   const [cnpj, setCnpj] = useState(settings.cnpj);
   const [warrantyTerms, setWarrantyTerms] = useState(settings.warrantyTerms);
   const [defaultSaleCommission, setDefaultSaleCommission] = useState(settings.defaultSaleCommission);
   const [defaultTechCommission, setDefaultTechCommission] = useState(settings.defaultTechCommission);
   const [whatsappGreetingTemplate, setWhatsappGreetingTemplate] = useState(settings.whatsappGreetingTemplate);
+
+  useEffect(() => {
+    if (settings.phone) {
+      setPhone(formatPhone(settings.phone));
+    }
+  }, [settings.phone]);
 
   // PHP/MySQL Backend Config State
   const [apiUrlInput, setApiUrlInput] = useState(phpApiUrl);
@@ -340,6 +350,88 @@ export const SettingsPanel: React.FC = () => {
         )}
       </div>
 
+      {/* ========================================================
+          AUTENTICAÇÃO EM DOIS FATORES (2FA) - CONTA DO COLABORADOR
+         ======================================================== */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 space-y-5 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                <span>Autenticação em dois fatores</span>
+              </h3>
+              <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-2xs font-semibold text-slate-300">
+                Opcional
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Proteja sua conta com um aplicativo autenticador.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 sm:text-right">
+            <div>
+              <span className="text-2xs uppercase tracking-wider text-slate-400 block font-semibold">
+                Status da proteção
+              </span>
+              <span
+                className={`inline-flex items-center gap-1.5 font-bold text-xs ${
+                  currentUser?.twoFactorEnabled ? 'text-emerald-400' : 'text-slate-400'
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    currentUser?.twoFactorEnabled ? 'bg-emerald-400 shadow-sm shadow-emerald-400' : 'bg-slate-500'
+                  }`}
+                />
+                {currentUser?.twoFactorEnabled ? 'Ativada' : 'Desativada'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card Google Authenticator solicitado */}
+        <div className="rounded-2xl border border-slate-800/90 bg-slate-950/80 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shadow-md shadow-cyan-950/30">
+              <Smartphone className="h-6 w-6" />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-white">Google Authenticator</span>
+                {currentUser?.twoFactorEnabled ? (
+                  <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-2xs font-bold text-emerald-300 border border-emerald-500/30">
+                    Ativo no seu login
+                  </span>
+                ) : (
+                  <span className="rounded-md bg-slate-800 px-2 py-0.5 text-2xs font-semibold text-slate-400 border border-slate-700">
+                    Inativo
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Adicione uma segunda etapa ao seu login.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setIsTwoFactorModalOpen(true)}
+              className={
+                currentUser?.twoFactorEnabled
+                  ? "rounded-xl border border-slate-700 bg-slate-800/90 px-5 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-700 hover:text-white transition active:scale-95 shadow-sm"
+                  : "rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-cyan-950 hover:from-cyan-500 hover:to-blue-500 transition active:scale-95"
+              }
+            >
+              {currentUser?.twoFactorEnabled ? 'Gerenciar Proteção' : 'Ativar'}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <form onSubmit={handleSave} className="space-y-6 text-xs text-slate-200">
         {/* Company Info */}
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
@@ -407,8 +499,10 @@ export const SettingsPanel: React.FC = () => {
               <label className="block text-2xs font-medium text-slate-400 mb-1">Telefone / WhatsApp Comercial</label>
               <input
                 type="text"
+                maxLength={15}
+                placeholder="Ex: (73) 00000-0000"
                 value={phone}
-                onChange={e => setPhone(e.target.value)}
+                onChange={e => setPhone(formatPhone(e.target.value))}
                 className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500 font-mono"
               />
             </div>
@@ -544,6 +638,11 @@ export const SettingsPanel: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <TwoFactorModal
+        isOpen={isTwoFactorModalOpen}
+        onClose={() => setIsTwoFactorModalOpen(false)}
+      />
     </div>
   );
 };

@@ -79,6 +79,14 @@ export const AuditLogsView: React.FC = () => {
         return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
       case 'LOGIN_FAILED':
         return 'bg-rose-500/20 text-rose-300 border-rose-500/30 font-bold animate-pulse';
+      case '2FA_ENABLED':
+        return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 font-bold';
+      case '2FA_DISABLED':
+        return 'bg-rose-500/20 text-rose-300 border-rose-500/30 font-bold';
+      case '2FA_FAILED':
+        return 'bg-rose-500/20 text-rose-300 border-rose-500/30 font-bold animate-pulse';
+      case '2FA_RECOVERY_USED':
+        return 'bg-amber-500/20 text-amber-300 border-amber-500/30 font-bold';
       case 'LOGOUT':
         return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
       case 'CREATE':
@@ -197,6 +205,10 @@ export const AuditLogsView: React.FC = () => {
             <option value="all">Todas as Ações</option>
             <option value="LOGIN">LOGIN</option>
             <option value="LOGIN_FAILED">LOGIN_FAILED</option>
+            <option value="2FA_ENABLED">2FA_ENABLED (Ativação)</option>
+            <option value="2FA_DISABLED">2FA_DISABLED (Desativação)</option>
+            <option value="2FA_FAILED">2FA_FAILED (Tentativa 2FA Falha)</option>
+            <option value="2FA_RECOVERY_USED">2FA_RECOVERY_USED (Contingência)</option>
             <option value="CREATE">CREATE</option>
             <option value="UPDATE">UPDATE</option>
             <option value="STATUS_CHANGE">STATUS_CHANGE</option>

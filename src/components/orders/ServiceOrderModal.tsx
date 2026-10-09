@@ -797,32 +797,32 @@ export const ServiceOrderModal: React.FC<ServiceOrderModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsConfirmingDelete(true)}
-                  className="flex items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 hover:border-rose-500/50 transition active:scale-95"
+                  className="flex items-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/5 px-4 py-2.5 text-xs font-bold text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/40 transition-all duration-200 active:scale-95 group shadow-sm hover:shadow-rose-950/20"
                   title="Excluir esta Ordem de Serviço permanentemente"
                 >
-                  <Trash2 className="h-3.5 w-3.5 text-rose-400" />
-                  <span>Excluir Ordem de Serviço</span>
+                  <Trash2 className="h-4 w-4 text-rose-500 group-hover:scale-110 transition-transform" />
+                  <span>Excluir OS</span>
                 </button>
               ) : (
-                <div className="flex items-center gap-2 rounded-xl border border-rose-500/60 bg-rose-950/40 p-1.5 text-xs">
-                  <div className="flex items-center gap-1 text-2xs font-semibold text-rose-200 px-2">
-                    <AlertTriangle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
-                    <span>Confirmar exclusão da OS?</span>
+                <div className="flex items-center gap-2 rounded-xl border border-rose-500/40 bg-rose-950/40 p-1.5 text-xs animate-in zoom-in-95 duration-200">
+                  <div className="flex items-center gap-2 text-2xs font-bold text-rose-200 px-2.5">
+                    <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 animate-pulse" />
+                    <span>Confirmar exclusão?</span>
                   </div>
                   <button
                     type="button"
                     onClick={handleDelete}
-                    className="flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1 text-2xs font-bold text-white hover:bg-rose-500 transition shadow-sm"
+                    className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-2xs font-bold text-white hover:bg-rose-500 transition-all shadow-lg shadow-rose-950/40 active:scale-95"
                   >
-                    <Check className="h-3 w-3" />
-                    <span>Sim, Excluir</span>
+                    <Check className="h-3.5 w-3.5" />
+                    <span>Sim, Apagar</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsConfirmingDelete(false)}
-                    className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-2xs font-semibold text-slate-300 hover:bg-slate-700 transition"
+                    className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-2xs font-bold text-slate-300 hover:bg-slate-700 hover:text-white transition-all active:scale-95"
                   >
-                    Cancelar
+                    Não
                   </button>
                 </div>
               )

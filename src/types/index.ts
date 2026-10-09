@@ -30,6 +30,9 @@ export interface Employee {
   allowedTabs: ViewTab[];
   twoFactorEnabled?: boolean;
   twoFactorSecret?: string;
+  recoveryCodes?: string[];
+  twoFactorEnabledAt?: string;
+  failed2FAAttempts?: number;
   failedLoginAttempts?: number;
   lockoutUntil?: string;
   createdAt: string;
@@ -41,7 +44,22 @@ export interface AuditLog {
   userId: string;
   userName: string;
   userRole: UserRole;
-  action: 'LOGIN' | 'LOGOUT' | 'LOGIN_FAILED' | 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE' | 'PAYMENT' | 'STOCK_ADJUST' | 'BACKUP' | 'PERMISSION_CHANGE';
+  action:
+    | 'LOGIN'
+    | 'LOGOUT'
+    | 'LOGIN_FAILED'
+    | '2FA_ENABLED'
+    | '2FA_DISABLED'
+    | '2FA_FAILED'
+    | '2FA_RECOVERY_USED'
+    | 'CREATE'
+    | 'UPDATE'
+    | 'DELETE'
+    | 'STATUS_CHANGE'
+    | 'PAYMENT'
+    | 'STOCK_ADJUST'
+    | 'BACKUP'
+    | 'PERMISSION_CHANGE';
   entity: 'Auth' | 'ServiceOrder' | 'Sale' | 'Client' | 'Product' | 'TechPart' | 'Financial' | 'Commission' | 'Employee' | 'Settings' | 'Backup';
   entityId?: string;
   details: string;

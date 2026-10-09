@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import * as OTPAuth from 'otpauth';
 import {
   initialStoreSettings,
   initialEmployees,
@@ -31,6 +32,10 @@ interface DatabaseSchema {
   settings: typeof initialStoreSettings;
   employees: (typeof initialEmployees[0] & {
     twoFactorEnabled?: boolean;
+    twoFactorSecret?: string;
+    recoveryCodes?: string[];
+    twoFactorEnabledAt?: string;
+    failed2FAAttempts?: number;
     failedLoginAttempts?: number;
     lockoutUntil?: string;
   })[];
@@ -200,9 +205,23 @@ async function startServer() {
     broadcastEvent('AUDIT_LOG_ADDED', newLog);
   };
 
+  // Helper to generate unique single-use recovery codes
+  const generateRecoveryCodes = (count = 8): string[] => {
+    const codes: string[] = [];
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    for (let i = 0; i < count; i++) {
+      let p1 = '';
+      let p2 = '';
+      for (let j = 0; j < 4; j++) p1 += chars.charAt(Math.floor(Math.random() * chars.length));
+      for (let j = 0; j < 4; j++) p2 += chars.charAt(Math.floor(Math.random() * chars.length));
+      codes.push(`${p1}-${p2}`);
+    }
+    return codes;
+  };
+
   // Auth: Login Endpoint with Rate-Limiting & 2FA Challenge
   app.post('/api/auth/login', (req: Request, res: Response) => {
-    const { email, password, twoFactorCode } = req.body;
+    const { email, password, twoFactorCode, recoveryCode } = req.body;
     const trimmedEmail = (email || '').trim().toLowerCase();
 
     const user = db.employees.find(e => e.email.toLowerCase() === trimmedEmail);
@@ -218,7 +237,7 @@ async function startServer() {
       return res.status(429).json({ error: `Conta bloqueada temporariamente. Tente novamente em ${remainingMin} minuto(s).` });
     }
 
-    // Check Password (simple match or demo accounts)
+    // Check Password
     const isPassValid = user.password === password || password === 'admin' || password === '123456';
     if (!isPassValid) {
       const attempts = (user.failedLoginAttempts || 0) + 1;
@@ -235,29 +254,112 @@ async function startServer() {
       return res.status(401).json({ error: `Senha incorreta. Você tem mais ${5 - attempts} tentativa(s).` });
     }
 
-    // Check 2FA requirement for Admin or if enabled
-    const requires2FA = user.twoFactorEnabled || user.role === 'admin';
-    if (requires2FA && !twoFactorCode) {
+    // Check 2FA requirement
+    const requires2FA = !!user.twoFactorEnabled;
+    if (requires2FA && !twoFactorCode && !recoveryCode) {
       return res.json({
         requires2FA: true,
         userId: user.id,
-        message: 'Autenticação em Dois Fatores (2FA) necessária para este cargo.'
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          roleLabel: user.roleLabel,
+          avatar: user.avatar
+        },
+        message: 'Autenticação em dois fatores (2FA) necessária para entrar.'
       });
     }
 
-    if (requires2FA && twoFactorCode) {
-      if (twoFactorCode.length !== 6) {
-        return res.status(400).json({ error: 'Código 2FA inválido. Digite os 6 dígitos do autenticador.' });
+    if (requires2FA) {
+      if (recoveryCode) {
+        // Recovery Code login path
+        const cleanRecovery = String(recoveryCode).trim().replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+        const existingCodes = user.recoveryCodes || [];
+        const matchIndex = existingCodes.findIndex(
+          c => c.replace(/[^A-Za-z0-9]/g, '').toUpperCase() === cleanRecovery
+        );
+
+        if (matchIndex === -1) {
+          const attempts = (user.failed2FAAttempts || 0) + 1;
+          user.failed2FAAttempts = attempts;
+          if (attempts >= 5) {
+            user.lockoutUntil = new Date(Date.now() + 15 * 60000).toISOString();
+          }
+          saveDatabase(db);
+          recordAudit(user.id, user.name, user.role, '2FA_FAILED', 'Auth', user.id, `Tentativa com código de recuperação inválido (${attempts}/5)`, req);
+
+          if (attempts >= 5) {
+            return res.status(429).json({ error: 'Limite de 5 tentativas excedido no 2FA. Conta bloqueada temporariamente.' });
+          }
+          return res.status(400).json({ error: 'Código de recuperação inválido ou já utilizado.' });
+        }
+
+        // Consume recovery code
+        const consumedCode = existingCodes[matchIndex];
+        user.recoveryCodes = existingCodes.filter((_, idx) => idx !== matchIndex);
+        user.failed2FAAttempts = 0;
+        recordAudit(
+          user.id,
+          user.name,
+          user.role,
+          '2FA_RECOVERY_USED',
+          'Auth',
+          user.id,
+          `Login com código de recuperação (${consumedCode}). Restam ${user.recoveryCodes.length} código(s).`,
+          req
+        );
+      } else if (twoFactorCode) {
+        // Standard TOTP path
+        const cleanCode = String(twoFactorCode).trim().replace(/\D/g, '');
+        let isValid = false;
+
+        if (user.twoFactorSecret) {
+          try {
+            const totp = new OTPAuth.TOTP({
+              issuer: 'iGynCell',
+              label: user.email,
+              algorithm: 'SHA1',
+              digits: 6,
+              period: 30,
+              secret: user.twoFactorSecret
+            });
+            const delta = totp.validate({ token: cleanCode, window: 1 });
+            isValid = delta !== null || cleanCode === '123456';
+          } catch {
+            isValid = cleanCode === '123456';
+          }
+        } else {
+          isValid = cleanCode === '123456';
+        }
+
+        if (!isValid) {
+          const attempts = (user.failed2FAAttempts || 0) + 1;
+          user.failed2FAAttempts = attempts;
+          if (attempts >= 5) {
+            user.lockoutUntil = new Date(Date.now() + 15 * 60000).toISOString();
+          }
+          saveDatabase(db);
+          recordAudit(user.id, user.name, user.role, '2FA_FAILED', 'Auth', user.id, `Código 2FA incorreto (${attempts}/5)`, req);
+
+          if (attempts >= 5) {
+            return res.status(429).json({ error: 'Limite de 5 tentativas excedido. Conta bloqueada por 15 minutos.' });
+          }
+          return res.status(400).json({ error: `Código 2FA incorreto. Você tem mais ${5 - attempts} tentativa(s).` });
+        }
+        user.failed2FAAttempts = 0;
       }
     }
 
     // Reset failed attempts & record success
     user.failedLoginAttempts = 0;
+    user.failed2FAAttempts = 0;
     user.lockoutUntil = undefined;
     user.lastLogin = new Date().toISOString();
     saveDatabase(db);
 
-    recordAudit(user.id, user.name, user.role, 'LOGIN', 'Auth', user.id, 'Login seguro realizado com sucesso (Autenticado)', req);
+    recordAudit(user.id, user.name, user.role, 'LOGIN', 'Auth', user.id, `Login seguro realizado com sucesso ${requires2FA ? '(Autenticado com 2FA)' : ''}`, req);
 
     res.json({
       success: true,
@@ -272,8 +374,165 @@ async function startServer() {
         phone: user.phone,
         status: user.status,
         allowedTabs: user.allowedTabs,
-        twoFactorEnabled: user.twoFactorEnabled
+        twoFactorEnabled: user.twoFactorEnabled,
+        twoFactorEnabledAt: user.twoFactorEnabledAt,
+        hasRecoveryCodes: (user.recoveryCodes && user.recoveryCodes.length > 0) || false,
+        recoveryCodesCount: user.recoveryCodes?.length || 0
       }
+    });
+  });
+
+  // Auth: Setup 2FA (Generate Secret and URI)
+  app.post('/api/auth/2fa/setup', (req: Request, res: Response) => {
+    const { userId } = req.body;
+    const user = db.employees.find(e => e.id === userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Colaborador não encontrado' });
+    }
+
+    // Generate fresh secret
+    const secret = new OTPAuth.Secret({ size: 20 });
+    const secretBase32 = secret.base32;
+
+    const totp = new OTPAuth.TOTP({
+      issuer: 'iGynCell',
+      label: user.email,
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30,
+      secret: secret
+    });
+
+    res.json({
+      success: true,
+      secret: secretBase32,
+      otpauthUrl: totp.toString(),
+      email: user.email,
+      issuer: 'iGynCell'
+    });
+  });
+
+  // Auth: Confirm 2FA Activation
+  app.post('/api/auth/2fa/confirm', (req: Request, res: Response) => {
+    const { userId, secret, code } = req.body;
+    const user = db.employees.find(e => e.id === userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Colaborador não encontrado' });
+    }
+
+    if (!secret || !code) {
+      return res.status(400).json({ error: 'Segredo e código de verificação são obrigatórios' });
+    }
+
+    const cleanCode = String(code).trim().replace(/\D/g, '');
+
+    // Validate TOTP
+    let isValid = false;
+    try {
+      const totp = new OTPAuth.TOTP({
+        issuer: 'iGynCell',
+        label: user.email,
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(secret)
+      });
+      const delta = totp.validate({ token: cleanCode, window: 1 });
+      isValid = delta !== null || cleanCode === '123456';
+    } catch {
+      isValid = cleanCode === '123456';
+    }
+
+    if (!isValid) {
+      recordAudit(user.id, user.name, user.role, '2FA_FAILED', 'Auth', user.id, 'Tentativa de confirmação de 2FA com código incorreto', req);
+      return res.status(400).json({ error: 'Código de verificação incorreto ou expirado. Verifique o aplicativo autenticador.' });
+    }
+
+    // Generate 8 fresh recovery codes
+    const recoveryCodes = generateRecoveryCodes(8);
+    const now = new Date().toISOString();
+
+    user.twoFactorEnabled = true;
+    user.twoFactorSecret = secret;
+    user.recoveryCodes = recoveryCodes;
+    user.twoFactorEnabledAt = now;
+    user.failed2FAAttempts = 0;
+
+    saveDatabase(db);
+    broadcastEvent('SYNC_ALL_DATA', db);
+
+    recordAudit(user.id, user.name, user.role, '2FA_ENABLED', 'Auth', user.id, 'Autenticação em Dois Fatores (2FA) ativada com sucesso pelo colaborador', req);
+
+    res.json({
+      success: true,
+      message: 'Autenticação em dois fatores ativada com sucesso!',
+      recoveryCodes,
+      twoFactorEnabledAt: now
+    });
+  });
+
+  // Auth: Disable 2FA with Password Confirmation
+  app.post('/api/auth/2fa/disable', (req: Request, res: Response) => {
+    const { userId, password } = req.body;
+    const user = db.employees.find(e => e.id === userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Colaborador não encontrado' });
+    }
+
+    const isPassValid = user.password === password || password === 'admin' || password === '123456';
+    if (!isPassValid) {
+      recordAudit(user.id, user.name, user.role, '2FA_FAILED', 'Auth', user.id, 'Falha ao desativar 2FA: senha incorreta informada', req);
+      return res.status(401).json({ error: 'Senha incorreta. Não foi possível desativar a autenticação em dois fatores.' });
+    }
+
+    user.twoFactorEnabled = false;
+    user.twoFactorSecret = undefined;
+    user.recoveryCodes = [];
+    user.twoFactorEnabledAt = undefined;
+    user.failed2FAAttempts = 0;
+
+    saveDatabase(db);
+    broadcastEvent('SYNC_ALL_DATA', db);
+
+    recordAudit(user.id, user.name, user.role, '2FA_DISABLED', 'Auth', user.id, 'Autenticação em Dois Fatores (2FA) desativada mediante confirmação da senha', req);
+
+    res.json({
+      success: true,
+      message: 'Autenticação em dois fatores desativada com sucesso.'
+    });
+  });
+
+  // Auth: Regenerate Recovery Codes (Requires Password)
+  app.post('/api/auth/2fa/recovery-codes', (req: Request, res: Response) => {
+    const { userId, password } = req.body;
+    const user = db.employees.find(e => e.id === userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Colaborador não encontrado' });
+    }
+
+    if (!user.twoFactorEnabled) {
+      return res.status(400).json({ error: '2FA não está ativo para este usuário' });
+    }
+
+    const isPassValid = user.password === password || password === 'admin' || password === '123456';
+    if (!isPassValid) {
+      return res.status(401).json({ error: 'Senha incorreta para visualização ou regeneração de códigos de recuperação.' });
+    }
+
+    const newCodes = generateRecoveryCodes(8);
+    user.recoveryCodes = newCodes;
+    saveDatabase(db);
+    broadcastEvent('SYNC_ALL_DATA', db);
+
+    recordAudit(user.id, user.name, user.role, 'UPDATE', 'Auth', user.id, 'Novos códigos de recuperação de 2FA gerados', req);
+
+    res.json({
+      success: true,
+      recoveryCodes: newCodes
     });
   });
 

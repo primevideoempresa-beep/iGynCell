@@ -13,11 +13,13 @@ import {
   Menu,
   X,
   FileText,
-  Plus
+  Plus,
+  Smartphone
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { ViewTab } from '../../types';
+import { TwoFactorModal } from '../auth/TwoFactorModal';
 
 interface HeaderProps {
   onOpenMobileMenu: () => void;
@@ -56,6 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSwitchMenu, setShowSwitchMenu] = useState(false);
+  const [show2FAModal, setShow2FAModal] = useState(false);
 
   const getBreadcrumbTitle = (tab: ViewTab) => {
     switch (tab) {
@@ -148,23 +151,44 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
                 </div>
 
-                <div className="border-t border-slate-800 pt-1">
+                <div className="border-t border-slate-800 pt-1 space-y-0.5">
+                  <button
+                    onClick={() => {
+                      setShow2FAModal(true);
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full flex items-center justify-between rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="h-3.5 w-3.5 text-cyan-400" />
+                      <span>Autenticação 2FA</span>
+                    </div>
+                    <span className={`text-3xs font-bold px-1.5 py-0.5 rounded ${
+                      currentUser?.twoFactorEnabled
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    }`}>
+                      {currentUser?.twoFactorEnabled ? 'Ativada' : 'Desativada'}
+                    </span>
+                  </button>
+
                   <button
                     onClick={() => {
                       setCurrentTab('settings');
                       setShowUserMenu(false);
                     }}
-                    className="w-full flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white"
+                    className="w-full flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition"
                   >
                     <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                    <span>Dados da Loja ({settings.storeName})</span>
+                    <span>Configurações da Loja</span>
                   </button>
+
                   <button
                     onClick={() => {
                       logout();
                       setShowUserMenu(false);
                     }}
-                    className="w-full flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10"
+                    className="w-full flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10 transition"
                   >
                     <LogOut className="h-3.5 w-3.5" />
                     <span>Sair da Sessão</span>
@@ -175,6 +199,11 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </div>
+
+      <TwoFactorModal
+        isOpen={show2FAModal}
+        onClose={() => setShow2FAModal(false)}
+      />
     </header>
   );
 };

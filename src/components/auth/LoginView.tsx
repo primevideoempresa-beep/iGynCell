@@ -37,6 +37,8 @@ export const LoginView: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -68,15 +70,24 @@ export const LoginView: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const ok = await verify2FA(twoFactorCode);
-      if (!ok) {
-        setErrorMsg('Código 2FA incorreto ou expirado. Tente novamente.');
+      const codeToSend = useRecoveryCode ? recoveryCode : twoFactorCode;
+      const res = await verify2FA(codeToSend, useRecoveryCode);
+      if (!res.success) {
+        setErrorMsg(res.error || 'Código incorreto ou expirado. Tente novamente.');
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao validar código 2FA.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCancel2FA = () => {
+    cancel2FA();
+    setTwoFactorCode('');
+    setRecoveryCode('');
+    setUseRecoveryCode(false);
+    setErrorMsg('');
   };
 
   const handleForgotSubmit = async (e: React.FormEvent) => {
@@ -183,56 +194,110 @@ export const LoginView: React.FC = () => {
             <div className="space-y-6">
               <div className="login-title">
                 <div className="user-icon-brand">
-                  <KeyRound className="text-white h-8 w-8" />
+                  <ShieldCheck className="text-cyan-400 h-8 w-8" />
                 </div>
                 <div>
-                  <h2>Autenticação 2FA</h2>
+                  <h2>Autenticação em 2 Etapas</h2>
                   <p>
-                    Proteção ativada para <strong className="text-white">{pendingUser2FA?.name}</strong>.
-                    Digite o código de 6 dígitos do seu app autenticador.
+                    Proteção ativada para <strong className="text-white">{pendingUser2FA?.name}</strong>
                   </p>
                 </div>
               </div>
 
+              {/* Collaborator chip */}
+              <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+                <img
+                  src={pendingUser2FA?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
+                  alt={pendingUser2FA?.name}
+                  className="h-10 w-10 rounded-lg object-cover border border-slate-700"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-bold text-white block truncate">{pendingUser2FA?.name}</span>
+                  <span className="text-2xs text-cyan-400 font-mono block truncate">{pendingUser2FA?.email}</span>
+                </div>
+                <span className="rounded bg-cyan-950/80 border border-cyan-800 px-2 py-0.5 text-2xs font-bold text-cyan-300">
+                  2FA Ativo
+                </span>
+              </div>
+
               {errorMsg && (
-                <div className="mb-4 flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-300">
+                <div className="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-300">
                   <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
                   <span>{errorMsg}</span>
                 </div>
               )}
 
-              <form onSubmit={handle2FASubmit}>
-                <div className="form-group-custom">
-                  <label>Código de Verificação</label>
-                  <div className="input-container-custom">
-                    <ShieldCheck className="mr-3 h-5 w-5 text-[#6685a8]" />
-                    <input
-                      type="text"
-                      maxLength={6}
-                      autoFocus
-                      required
-                      value={twoFactorCode}
-                      onChange={e => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
-                      placeholder="000000"
-                      className="tracking-[0.5em] font-mono text-center"
-                    />
+              <form onSubmit={handle2FASubmit} className="space-y-4">
+                {!useRecoveryCode ? (
+                  /* Standard 6-digit TOTP Input */
+                  <div className="form-group-custom">
+                    <label>Código do Google Authenticator (6 dígitos)</label>
+                    <div className="input-container-custom">
+                      <KeyRound className="mr-3 h-5 w-5 text-[#6685a8]" />
+                      <input
+                        type="text"
+                        maxLength={6}
+                        autoFocus
+                        required
+                        value={twoFactorCode}
+                        onChange={e => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
+                        placeholder="000000"
+                        className="tracking-[0.5em] font-mono text-center text-lg font-bold"
+                      />
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* Single-use Recovery Code Input */
+                  <div className="form-group-custom">
+                    <label>Código de Recuperação (Contingência)</label>
+                    <div className="input-container-custom">
+                      <Lock className="mr-3 h-5 w-5 text-amber-400" />
+                      <input
+                        type="text"
+                        autoFocus
+                        required
+                        value={recoveryCode}
+                        onChange={e => setRecoveryCode(e.target.value.toUpperCase())}
+                        placeholder="Ex: A89B-23KD"
+                        className="font-mono text-center tracking-wider text-base font-bold uppercase"
+                      />
+                    </div>
+                    <span className="text-2xs text-slate-400 block mt-1">
+                      Digite um dos códigos de uso único salvos na ativação.
+                    </span>
+                  </div>
+                )}
 
-                <div className="flex gap-4">
+                {/* Switch between TOTP and Recovery Code */}
+                <div className="text-center pt-1">
                   <button
                     type="button"
-                    onClick={cancel2FA}
-                    className="flex-1 h-[56px] rounded-lg border border-[#284666] text-[#c1d1e5] hover:bg-[#111f37] transition"
+                    onClick={() => {
+                      setUseRecoveryCode(!useRecoveryCode);
+                      setErrorMsg('');
+                    }}
+                    className="text-xs text-cyan-400 hover:text-cyan-300 underline font-medium"
+                  >
+                    {!useRecoveryCode
+                      ? 'Não está com o celular? Usar código de recuperação'
+                      : 'Voltar e usar o código do Google Authenticator'}
+                  </button>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleCancel2FA}
+                    className="flex-1 h-[52px] rounded-xl border border-[#284666] text-[#c1d1e5] hover:bg-[#111f37] transition font-semibold text-xs"
                   >
                     Voltar
                   </button>
                   <button
                     type="submit"
-                    disabled={isLoading || twoFactorCode.length < 6}
-                    className="login-button-custom flex-1"
+                    disabled={isLoading || (!useRecoveryCode ? twoFactorCode.length < 6 : recoveryCode.trim().length < 4)}
+                    className="login-button-custom flex-1 h-[52px]"
                   >
-                    <span>{isLoading ? 'Validando...' : 'Validar'}</span>
+                    <span>{isLoading ? 'Validando...' : 'Confirmar Acesso'}</span>
                     {!isLoading && <span className="arrow-icon">→</span>}
                   </button>
                 </div>

@@ -15,7 +15,9 @@ import {
   XCircle,
   Percent,
   Lock,
-  Unlock
+  Unlock,
+  ShieldAlert,
+  Smartphone
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -23,6 +25,7 @@ import { Employee, UserRole } from '../../types';
 import { formatDate } from '../../utils/formatters';
 import { exportToCSV } from '../../utils/exportUtils';
 import { EmployeeModal } from './EmployeeModal';
+import { TwoFactorModal } from '../auth/TwoFactorModal';
 
 export const EmployeesList: React.FC = () => {
   const { employees, deleteEmployee, updateEmployee, searchTerm, setSearchTerm } = useApp();
@@ -31,6 +34,8 @@ export const EmployeesList: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [selectedEmployeeToEdit, setSelectedEmployeeToEdit] = useState<Employee | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [twoFactorTargetEmp, setTwoFactorTargetEmp] = useState<Employee | null>(null);
+  const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
 
   const filteredEmployees = employees.filter(emp => {
     const matchesSearch =
@@ -136,6 +141,48 @@ export const EmployeesList: React.FC = () => {
         </div>
       </div>
 
+      {/* Security & 2FA Metrics Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 flex items-center justify-between">
+          <div>
+            <span className="text-2xs uppercase tracking-wider text-slate-400 font-semibold block">Total da Equipe</span>
+            <span className="text-xl font-extrabold text-white font-mono">{employees.length}</span>
+          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-slate-300">
+            <Users className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-slate-900/90 to-cyan-950/20 p-4 flex items-center justify-between">
+          <div>
+            <span className="text-2xs uppercase tracking-wider text-cyan-400 font-semibold block">Proteção 2FA Ativa</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-extrabold text-emerald-400 font-mono">
+                {employees.filter(e => e.twoFactorEnabled).length}
+              </span>
+              <span className="text-xs text-slate-400">
+                / {employees.length} ({Math.round((employees.filter(e => e.twoFactorEnabled).length / (employees.length || 1)) * 100)}%)
+              </span>
+            </div>
+          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 flex items-center justify-between">
+          <div>
+            <span className="text-2xs uppercase tracking-wider text-slate-400 font-semibold block">Contas Ativas</span>
+            <span className="text-xl font-extrabold text-white font-mono">
+              {employees.filter(e => e.status === 'active').length}
+            </span>
+          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+            <CheckCircle2 className="h-5 w-5" />
+          </div>
+        </div>
+      </div>
+
       {/* Employee Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredEmployees.map(emp => {
@@ -231,6 +278,36 @@ export const EmployeesList: React.FC = () => {
                 </div>
               </div>
 
+              {/* 2FA Protection Status Pill */}
+              <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-2xs">
+                <span className="text-slate-400 font-medium">Autenticação 2FA:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTwoFactorTargetEmp(emp);
+                    setIs2FAModalOpen(true);
+                  }}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-2xs font-semibold transition ${
+                    emp.twoFactorEnabled
+                      ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                      : 'bg-slate-800 border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white'
+                  }`}
+                  title="Configurar ou gerenciar 2FA deste colaborador"
+                >
+                  {emp.twoFactorEnabled ? (
+                    <>
+                      <ShieldCheck className="h-3 w-3 text-emerald-400" />
+                      <span>Ativada</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldAlert className="h-3 w-3 text-slate-500" />
+                      <span>Desativada</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
               {/* Commission Rates Badge */}
               <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-2.5 flex items-center justify-between text-2xs">
                 <div>
@@ -270,6 +347,12 @@ export const EmployeesList: React.FC = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         employeeToEdit={selectedEmployeeToEdit}
+      />
+
+      <TwoFactorModal
+        isOpen={is2FAModalOpen}
+        onClose={() => setIs2FAModalOpen(false)}
+        targetEmployee={twoFactorTargetEmp}
       />
     </div>
   );

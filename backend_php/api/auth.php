@@ -151,6 +151,135 @@ switch ($action) {
         }
         break;
 
+    // ------------------------------------------------------------------------
+    // SETUP 2FA (GERAR SEGREDO E URI QR CODE)
+    // ------------------------------------------------------------------------
+    case '2fa_setup':
+        if ($method !== 'POST') sendError('Método inválido', 405);
+        $data = getJsonBody();
+        $userId = $data['userId'] ?? null;
+        if (!$userId) sendError('ID de colaborador obrigatório', 400);
+
+        $stmt = $pdo->prepare("SELECT `id`, `email` FROM `employees` WHERE `id` = :id LIMIT 1");
+        $stmt->execute(['id' => $userId]);
+        $user = $stmt->fetch();
+        if (!$user) sendError('Colaborador não encontrado', 404);
+
+        // Gerar chave Base32 aleatória de 16 caracteres
+        $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+        $secret = '';
+        for ($i = 0; $i < 32; $i++) {
+            $secret .= $chars[random_int(0, strlen($chars) - 1)];
+        }
+        $otpauthUrl = "otpauth://totp/iGynCell:" . urlencode($user['email']) . "?secret=" . $secret . "&issuer=iGynCell";
+
+        sendJson([
+            'success' => true,
+            'secret' => $secret,
+            'otpauthUrl' => $otpauthUrl,
+            'email' => $user['email'],
+            'issuer' => 'iGynCell'
+        ]);
+        break;
+
+    // ------------------------------------------------------------------------
+    // CONFIRMAR E ATIVAR 2FA
+    // ------------------------------------------------------------------------
+    case '2fa_confirm':
+        if ($method !== 'POST') sendError('Método inválido', 405);
+        $data = getJsonBody();
+        $userId = $data['userId'] ?? null;
+        $secret = $data['secret'] ?? null;
+        $code = trim($data['code'] ?? '');
+
+        if (!$userId || !$secret || strlen($code) !== 6) {
+            sendError('Dados incompletos ou código inválido', 400);
+        }
+
+        // Gerar 8 códigos de recuperação
+        $recoveryCodes = [];
+        for ($i = 0; $i < 8; $i++) {
+            $c1 = strtoupper(bin2hex(random_bytes(2)));
+            $c2 = strtoupper(bin2hex(random_bytes(2)));
+            $recoveryCodes[] = "{$c1}-{$c2}";
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $stmt = $pdo->prepare("UPDATE `employees` SET `twoFactorEnabled` = 1, `twoFactorSecret` = :secret, `recoveryCodes` = :rec, `twoFactorEnabledAt` = :now WHERE `id` = :id");
+        $stmt->execute([
+            'secret' => $secret,
+            'rec' => json_encode($recoveryCodes),
+            'now' => $now,
+            'id' => $userId
+        ]);
+
+        logAudit($pdo, $userId, 'Colaborador', 'seller', '2FA_ENABLED', 'Auth', $userId, 'Autenticação em Dois Fatores ativada com sucesso');
+
+        sendJson([
+            'success' => true,
+            'message' => 'Autenticação em dois fatores ativada com sucesso!',
+            'recoveryCodes' => $recoveryCodes,
+            'twoFactorEnabledAt' => $now
+        ]);
+        break;
+
+    // ------------------------------------------------------------------------
+    // DESATIVAR 2FA COM CONFIRMAÇÃO DE SENHA
+    // ------------------------------------------------------------------------
+    case '2fa_disable':
+        if ($method !== 'POST') sendError('Método inválido', 405);
+        $data = getJsonBody();
+        $userId = $data['userId'] ?? null;
+        $password = $data['password'] ?? '';
+
+        $stmt = $pdo->prepare("SELECT * FROM `employees` WHERE `id` = :id LIMIT 1");
+        $stmt->execute(['id' => $userId]);
+        $user = $stmt->fetch();
+        if (!$user) sendError('Colaborador não encontrado', 404);
+
+        if (!verifyPassword($password, $user['password'] ?? '') && !verifyPassword($password, $user['passwordHash'] ?? '')) {
+            sendError('Senha incorreta. Não foi possível desativar a autenticação de dois fatores.', 401);
+        }
+
+        $stmt = $pdo->prepare("UPDATE `employees` SET `twoFactorEnabled` = 0, `twoFactorSecret` = NULL, `recoveryCodes` = NULL, `twoFactorEnabledAt` = NULL WHERE `id` = :id");
+        $stmt->execute(['id' => $userId]);
+
+        logAudit($pdo, $userId, $user['name'], $user['role'], '2FA_DISABLED', 'Auth', $userId, 'Autenticação em dois fatores desativada com confirmação de senha');
+
+        sendJson(['success' => true, 'message' => '2FA desativado com sucesso']);
+        break;
+
+    // ------------------------------------------------------------------------
+    // REGENERAR CÓDIGOS DE RECUPERAÇÃO
+    // ------------------------------------------------------------------------
+    case '2fa_recovery_codes':
+        if ($method !== 'POST') sendError('Método inválido', 405);
+        $data = getJsonBody();
+        $userId = $data['userId'] ?? null;
+        $password = $data['password'] ?? '';
+
+        $stmt = $pdo->prepare("SELECT * FROM `employees` WHERE `id` = :id LIMIT 1");
+        $stmt->execute(['id' => $userId]);
+        $user = $stmt->fetch();
+        if (!$user) sendError('Colaborador não encontrado', 404);
+
+        if (!verifyPassword($password, $user['password'] ?? '') && !verifyPassword($password, $user['passwordHash'] ?? '')) {
+            sendError('Senha incorreta.', 401);
+        }
+
+        $recoveryCodes = [];
+        for ($i = 0; $i < 8; $i++) {
+            $c1 = strtoupper(bin2hex(random_bytes(2)));
+            $c2 = strtoupper(bin2hex(random_bytes(2)));
+            $recoveryCodes[] = "{$c1}-{$c2}";
+        }
+
+        $stmt = $pdo->prepare("UPDATE `employees` SET `recoveryCodes` = :rec WHERE `id` = :id");
+        $stmt->execute(['rec' => json_encode($recoveryCodes), 'id' => $userId]);
+
+        sendJson(['success' => true, 'recoveryCodes' => $recoveryCodes]);
+        break;
+
     default:
         sendError('Ação desconhecida', 404);
 }

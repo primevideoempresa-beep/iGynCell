@@ -40,7 +40,11 @@
         "settings"
       ],
       "createdAt": "2025-01-10T08:00:00.000Z",
-      "lastLogin": "2026-10-05T15:30:00.000Z"
+      "lastLogin": "2026-10-09T23:17:43.643Z",
+      "twoFactorEnabled": false,
+      "recoveryCodes": [],
+      "failed2FAAttempts": 0,
+      "failedLoginAttempts": 0
     },
     {
       "id": "emp-3",
@@ -1305,6 +1309,84 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "log-1791587876926-u54f",
+      "userId": "emp-1",
+      "userName": "Rodrigo Silva",
+      "userRole": "admin",
+      "action": "2FA_DISABLED",
+      "entity": "Auth",
+      "entityId": "emp-1",
+      "details": "Autenticação em Dois Fatores (2FA) desativada mediante confirmação da senha",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "createdAt": "2026-10-09T23:17:56.926Z"
+    },
+    {
+      "id": "log-1791587871224-tlkv",
+      "userId": "emp-1",
+      "userName": "Rodrigo Silva",
+      "userRole": "admin",
+      "action": "2FA_FAILED",
+      "entity": "Auth",
+      "entityId": "emp-1",
+      "details": "Falha ao desativar 2FA: senha incorreta informada",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "createdAt": "2026-10-09T23:17:51.224Z"
+    },
+    {
+      "id": "log-1791587867687-wpzq",
+      "userId": "emp-1",
+      "userName": "Rodrigo Silva",
+      "userRole": "admin",
+      "action": "2FA_FAILED",
+      "entity": "Auth",
+      "entityId": "emp-1",
+      "details": "Tentativa com código de recuperação inválido (1/5)",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "createdAt": "2026-10-09T23:17:47.687Z"
+    },
+    {
+      "id": "log-1791587863643-crtv",
+      "userId": "emp-1",
+      "userName": "Rodrigo Silva",
+      "userRole": "admin",
+      "action": "LOGIN",
+      "entity": "Auth",
+      "entityId": "emp-1",
+      "details": "Login seguro realizado com sucesso (Autenticado com 2FA)",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "createdAt": "2026-10-09T23:17:43.643Z"
+    },
+    {
+      "id": "log-1791587863642-4yjk",
+      "userId": "emp-1",
+      "userName": "Rodrigo Silva",
+      "userRole": "admin",
+      "action": "2FA_RECOVERY_USED",
+      "entity": "Auth",
+      "entityId": "emp-1",
+      "details": "Login com código de recuperação (E4D7-MRBU). Restam 7 código(s).",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "createdAt": "2026-10-09T23:17:43.642Z"
+    },
+    {
+      "id": "log-1791587857693-i7fm",
+      "userId": "emp-1",
+      "userName": "Rodrigo Silva",
+      "userRole": "admin",
+      "action": "2FA_ENABLED",
+      "entity": "Auth",
+      "entityId": "emp-1",
+      "details": "Autenticação em Dois Fatores (2FA) ativada com sucesso pelo colaborador",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "createdAt": "2026-10-09T23:17:37.693Z"
+    },
     {
       "id": "log-1791249131373-sy4u",
       "userId": "system",

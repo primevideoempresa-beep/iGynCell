@@ -98,9 +98,9 @@ interface AppContextType {
   markCommissionPaid: (id: string) => void;
 
   employees: Employee[];
-  addEmployee: (employee: Omit<Employee, 'id' | 'createdAt'>) => Employee;
-  updateEmployee: (id: string, updates: Partial<Employee>) => void;
-  deleteEmployee: (id: string) => void;
+  addEmployee: (employee: Omit<Employee, 'id' | 'createdAt'>) => Promise<Employee>;
+  updateEmployee: (id: string, updates: Partial<Employee>) => Promise<void>;
+  deleteEmployee: (id: string) => Promise<void>;
 
   notifications: NotificationItem[];
   markNotificationRead: (id: string) => void;
@@ -119,7 +119,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const BROADCAST_CHANNEL_NAME = 'igyn_cell_realtime_sync_channel';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { updateEmployeeList } = useAuth();
+  const { employees, addEmployee, updateEmployee, deleteEmployee, updateEmployeeList } = useAuth();
   const [currentTab, setCurrentTab] = useState<ViewTab>('dashboard');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
@@ -205,15 +205,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    try {
-      const saved = localStorage.getItem('igyn_cell_employees');
-      return saved ? JSON.parse(saved) : initialEmployees;
-    } catch {
-      return initialEmployees;
-    }
-  });
-
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     try {
       const saved = localStorage.getItem('igyn_cell_notifications');
@@ -271,7 +262,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (data.financialEntries) setFinancialEntries(data.financialEntries);
         if (data.commissions) setCommissions(data.commissions);
         if (data.employees) {
-          setEmployees(data.employees);
           updateEmployeeList(data.employees);
         }
         if (data.notifications) setNotifications(data.notifications);
@@ -313,7 +303,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (p.financialEntries) setFinancialEntries(p.financialEntries);
               if (p.commissions) setCommissions(p.commissions);
               if (p.employees) {
-                setEmployees(p.employees);
                 updateEmployeeList(p.employees);
               }
               if (p.notifications) setNotifications(p.notifications);
@@ -352,7 +341,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (payload.financialEntries) setFinancialEntries(payload.financialEntries);
         if (payload.commissions) setCommissions(payload.commissions);
         if (payload.employees) {
-          setEmployees(payload.employees);
           updateEmployeeList(payload.employees);
         }
         if (payload.notifications) setNotifications(payload.notifications);
@@ -416,12 +404,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     try {
-      localStorage.setItem('igyn_cell_employees', JSON.stringify(employees));
-    } catch {}
-  }, [employees]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem('igyn_cell_notifications', JSON.stringify(notifications));
     } catch {}
   }, [notifications]);
@@ -431,7 +413,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSettings(prev => {
       const updated = { ...prev, ...newSettings };
       notifyBroadcast('SETTINGS_UPDATED', { settings: updated });
-      fetch('/api/settings', {
+      
+      const baseUrl = getApiBaseUrl();
+      const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+        ? `${baseUrl}/settings.php`
+        : `${baseUrl}/settings`;
+
+      fetch(endpoint, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated)
@@ -449,7 +437,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSales(initialSales);
     setFinancialEntries(initialFinancialEntries);
     setCommissions(initialCommissions);
-    setEmployees(initialEmployees);
     setNotifications(initialNotifications);
     updateEmployeeList(initialEmployees);
 
@@ -689,7 +676,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setClients(prev => [newClient, ...prev]);
     notifyBroadcast('CLIENT_ADDED', { client: newClient });
-    fetch('/api/clients', {
+    
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/clients.php`
+      : `${baseUrl}/clients`;
+
+    fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(clientData)
@@ -702,7 +695,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(c => (c.id === id ? { ...c, ...updates } : c))
     );
     notifyBroadcast('CLIENT_UPDATED', { id, updates });
-    fetch(`/api/clients/${id}`, {
+    
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/clients.php?id=${encodeURIComponent(id)}`
+      : `${baseUrl}/clients/${id}`;
+
+    fetch(endpoint, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -731,7 +730,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setProducts(prev => [newProduct, ...prev]);
     notifyBroadcast('PRODUCT_ADDED', { product: newProduct });
-    fetch('/api/products', {
+    
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/products.php`
+      : `${baseUrl}/products`;
+
+    fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(prodData)
@@ -745,7 +750,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(p => (p.id === id ? { ...p, ...updates, updatedAt: now } : p))
     );
     notifyBroadcast('PRODUCT_UPDATED', { id, updates });
-    fetch(`/api/products/${id}`, {
+    
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/products.php?id=${encodeURIComponent(id)}`
+      : `${baseUrl}/products/${id}`;
+
+    fetch(endpoint, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -792,7 +803,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setTechParts(prev => [newPart, ...prev]);
     notifyBroadcast('PART_ADDED', { part: newPart });
-    fetch('/api/techparts', {
+    
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/techparts.php`
+      : `${baseUrl}/techparts`;
+
+    fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(partData)
@@ -806,7 +823,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(p => (p.id === id ? { ...p, ...updates, updatedAt: now } : p))
     );
     notifyBroadcast('PART_UPDATED', { id, updates });
-    fetch(`/api/techparts/${id}`, {
+    
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/techparts.php?id=${encodeURIComponent(id)}`
+      : `${baseUrl}/techparts/${id}`;
+
+    fetch(endpoint, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -937,7 +960,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notifyBroadcast('SALE_ADDED', { sale: newSale });
 
     // Call backend API
-    fetch('/api/sales', {
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/sales.php`
+      : `${baseUrl}/sales`;
+
+    fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(saleData)
@@ -951,7 +979,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(s => (s.id === id ? { ...s, status: 'cancelled' } : s))
     );
     notifyBroadcast('SALE_CANCELLED', { id });
-    fetch(`/api/sales/${id}`, { method: 'DELETE' }).catch(() => {});
+    
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/sales.php?id=${encodeURIComponent(id)}`
+      : `${baseUrl}/sales/${id}`;
+
+    fetch(endpoint, { method: 'DELETE' }).catch(() => {});
   };
 
   // Financial Entries
@@ -1027,56 +1061,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
     notifyBroadcast('COMMISSION_PAID', { id });
-    fetch(`/api/commissions/${id}/pay`, { method: 'POST' }).catch(() => {});
-  };
+    
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/commissions.php?action=pay&id=${encodeURIComponent(id)}`
+      : `${baseUrl}/commissions/${id}/pay`;
 
-  // Employees CRUD
-  const addEmployee = (empData: Omit<Employee, 'id' | 'createdAt'>): Employee => {
-    const maxId = employees.reduce((max, emp) => {
-      const idNum = parseInt(emp.id.split('-')[1]);
-      return idNum > max ? idNum : max;
-    }, 0);
-    const newId = `emp-${maxId + 1}`;
-    const now = new Date().toISOString();
-    const newEmp: Employee = {
-      ...empData,
-      id: newId,
-      createdAt: now
-    };
-    const updated = [newEmp, ...employees];
-    setEmployees(updated);
-    updateEmployeeList(updated);
-    notifyBroadcast('EMPLOYEE_ADDED', { employee: newEmp });
-    fetch('/api/employees', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(empData)
-    }).catch(() => {});
-    return newEmp;
-  };
-
-  const updateEmployee = (id: string, updates: Partial<Employee>) => {
-    const updated = employees.map(e => (e.id === id ? { ...e, ...updates } : e));
-    setEmployees(updated);
-    updateEmployeeList(updated);
-    notifyBroadcast('EMPLOYEE_UPDATED', { id, updates });
-    fetch(`/api/employees/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
-    }).catch(() => {});
-  };
-
-  const deleteEmployee = async (id: string) => {
-    const updated = employees.filter(e => e.id !== id);
-    setEmployees(updated);
-    updateEmployeeList(updated);
-    notifyBroadcast('EMPLOYEE_DELETED', { id });
-    try {
-      await apiDeleteEmployee(id);
-    } catch (e) {
-      console.warn('Erro ao excluir colaborador no backend:', e);
-    }
+    fetch(endpoint, { method: 'POST' }).catch(() => {});
   };
 
   // Notifications
@@ -1084,12 +1075,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev =>
       prev.map(n => (n.id === id ? { ...n, read: true } : n))
     );
-    fetch(`/api/notifications/${id}/read`, { method: 'PUT' }).catch(() => {});
+    
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/notifications.php?action=read&id=${encodeURIComponent(id)}`
+      : `${baseUrl}/notifications/${id}/read`;
+
+    fetch(endpoint, { method: 'PUT' }).catch(() => {});
   };
 
   const clearAllNotifications = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    fetch('/api/notifications/clear-all', { method: 'PUT' }).catch(() => {});
+    
+    const baseUrl = getApiBaseUrl();
+    const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+      ? `${baseUrl}/notifications.php?action=clear-all`
+      : `${baseUrl}/notifications/clear-all`;
+
+    fetch(endpoint, { method: 'PUT' }).catch(() => {});
   };
 
   const unreadNotificationsCount = notifications.filter(n => !n.read).length;

@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Modal } from '../common/Modal';
 import { formatPhone } from '../../utils/formatters';
+import { TwoFactorModal } from '../auth/TwoFactorModal';
 import { 
   Users, 
   ShieldCheck, 
@@ -34,6 +35,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
   const { addEmployee, updateEmployee, deleteEmployee } = useApp();
   const { currentUser, isRole, unlockUser } = useAuth();
 
+  const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
   const isAdmin = isRole(['admin', 'manager']);
   const isEditingSelf = employeeToEdit?.id === currentUser?.id;
   const canEditSensitive = isAdmin && !isEditingSelf || (isAdmin && isEditingSelf); 
@@ -341,6 +343,30 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
           </div>
         </div>
 
+        {/* 2FA Protection Info & Trigger */}
+        {employeeToEdit && (
+          <div className="flex items-center justify-between gap-4 p-3.5 rounded-xl border border-slate-800 bg-slate-950/60">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${employeeToEdit.twoFactorEnabled ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-white block">Autenticação em Dois Fatores (2FA)</span>
+                <span className={`text-2xs font-semibold ${employeeToEdit.twoFactorEnabled ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  {employeeToEdit.twoFactorEnabled ? 'Proteção Ativada com Google Authenticator' : 'Proteção Desativada'}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIs2FAModalOpen(true)}
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-1.5 text-2xs font-bold text-slate-200 hover:bg-slate-700 hover:text-white transition shadow-sm"
+            >
+              {employeeToEdit.twoFactorEnabled ? 'Gerenciar 2FA' : 'Configurar 2FA'}
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-2xs font-medium text-slate-400 mb-1">Cargo / Nível de Acesso *</label>
@@ -481,6 +507,12 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
           </div>
         </div>
       </form>
+
+      <TwoFactorModal
+        isOpen={is2FAModalOpen}
+        onClose={() => setIs2FAModalOpen(false)}
+        targetEmployee={employeeToEdit}
+      />
     </Modal>
   );
 };
