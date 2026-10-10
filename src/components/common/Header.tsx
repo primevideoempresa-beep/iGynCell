@@ -119,8 +119,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         <div className="flex flex-col">
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
-            <span className="font-semibold text-cyan-400">iGyn Cell</span>
-            <span>/</span>
             <span className="text-slate-300 capitalize">{currentTab}</span>
           </div>
           <h1 className="text-sm font-semibold tracking-tight text-white sm:text-base">
