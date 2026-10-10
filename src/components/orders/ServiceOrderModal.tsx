@@ -320,6 +320,43 @@ export const ServiceOrderModal: React.FC<ServiceOrderModalProps> = ({
             </h4>
             <button
               type="button"
+              onClick={() => {
+                setDeviceType('Smartphone');
+                setBrand('Apple');
+                setModel('');
+                setColor('');
+                setImeiOrSerial('');
+                setPasscode('');
+                setPhysicalCondition('');
+                setChecklist({
+                  powersOn: true,
+                  touchWorks: true,
+                  displayOk: true,
+                  cameraFrontOk: true,
+                  cameraRearOk: true,
+                  microphoneOk: true,
+                  speakerOk: true,
+                  wifiOk: true,
+                  chargingOk: true,
+                  biometricsOk: true,
+                  frameDented: false,
+                  waterDamage: false
+                });
+                setProblemReported('');
+                setTechnicalDiagnosis('');
+                setPartsUsed([]);
+                setLaborCost(0);
+                setDiscount(0);
+                setPaymentMethod('pix');
+                setPaymentStatus('pending');
+                setTechnicalNotesInternal('');
+              }}
+              className="text-2xs font-semibold text-rose-400 hover:text-rose-300 mr-4"
+            >
+              Limpar Formulário
+            </button>
+            <button
+              type="button"
               onClick={() => setIsNewClient(!isNewClient)}
               className="text-2xs font-semibold text-cyan-400 hover:text-cyan-300"
             >
