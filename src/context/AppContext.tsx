@@ -132,6 +132,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [backendStatusInfo, setBackendStatusInfo] = useState<BackendConnectionTestResult | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
+  // Ensure outdated mock data in localStorage is cleared
+  const CLEAN_DATA_VERSION = 'v2_clean_zero_data';
+  try {
+    if (typeof window !== 'undefined') {
+      const currentVer = localStorage.getItem('igyn_cell_clean_version');
+      if (currentVer !== CLEAN_DATA_VERSION) {
+        localStorage.removeItem('igyn_cell_orders');
+        localStorage.removeItem('igyn_cell_clients');
+        localStorage.removeItem('igyn_cell_products');
+        localStorage.removeItem('igyn_cell_techparts');
+        localStorage.removeItem('igyn_cell_sales');
+        localStorage.removeItem('igyn_cell_financial');
+        localStorage.removeItem('igyn_cell_commissions');
+        localStorage.removeItem('igyn_cell_notifications');
+        localStorage.setItem('igyn_cell_clean_version', CLEAN_DATA_VERSION);
+      }
+    }
+  } catch {}
+
   // Load state from localStorage or initial seed
   const [settings, setSettings] = useState<StoreSettings>(() => {
     try {

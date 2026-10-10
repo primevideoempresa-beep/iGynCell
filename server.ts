@@ -62,51 +62,24 @@ interface DatabaseSchema {
   }[];
 }
 
-const initialAuditLogs = [
-  {
-    id: 'log-1',
-    userId: 'emp-1',
-    userName: 'Rodrigo Silva (Admin)',
-    userRole: 'admin',
-    action: 'LOGIN',
-    entity: 'Auth',
-    entityId: 'emp-1',
-    details: 'Login seguro autenticado com 2FA',
-    ipAddress: '192.168.1.100',
-    userAgent: 'Chrome / Windows',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'log-2',
-    userId: 'emp-3',
-    userName: 'Lucas Santos',
-    userRole: 'technician',
-    action: 'CREATE',
-    entity: 'ServiceOrder',
-    entityId: 'OS-1048',
-    details: 'Criou Ordem de Serviço #OS-1048 para Carlos Eduardo Mendes (iPhone 13)',
-    ipAddress: '192.168.1.105',
-    userAgent: 'Safari / macOS',
-    createdAt: new Date().toISOString()
-  }
-];
+const initialAuditLogs: any[] = [];
 
 const getInitialData = (): DatabaseSchema => ({
   settings: initialStoreSettings,
-  employees: initialEmployees.map((e, idx) => ({
+  employees: initialEmployees.map((e) => ({
     ...e,
-    twoFactorEnabled: idx === 0, // Admin has 2FA enabled by default
+    twoFactorEnabled: false,
     failedLoginAttempts: 0
   })),
-  clients: initialClients,
-  techParts: initialTechParts,
-  products: initialProducts,
-  orders: initialServiceOrders,
-  sales: initialSales,
-  financialEntries: initialFinancialEntries,
-  commissions: initialCommissions,
-  notifications: initialNotifications,
-  auditLogs: initialAuditLogs
+  clients: [],
+  techParts: [],
+  products: [],
+  orders: [],
+  sales: [],
+  financialEntries: [],
+  commissions: [],
+  notifications: [],
+  auditLogs: []
 });
 
 const loadDatabase = (): DatabaseSchema => {
@@ -730,8 +703,15 @@ async function startServer() {
   // Service Orders Endpoints
   app.post('/api/orders', (req: Request, res: Response) => {
     const orderData = req.body;
-    const nextNum = 1049 + db.orders.length;
-    const newId = `OS-${nextNum}`;
+    let newId = orderData.id || orderData.customId;
+    if (!newId) {
+      const nums = (db.orders || []).map(o => {
+        const match = o.id.match(/\d+/);
+        return match ? parseInt(match[0], 10) : 0;
+      });
+      const max = nums.length > 0 ? Math.max(1000, ...nums) : 1000;
+      newId = `OS-${max + 1}`;
+    }
     const now = new Date().toISOString();
 
     const newOrder = {
@@ -759,7 +739,7 @@ async function startServer() {
     // Register receivable entry in Financial
     if (newOrder.totalAmount > 0) {
       const finEntry = {
-        id: `FIN-${3008 + db.financialEntries.length}`,
+        id: `FIN-${1001 + db.financialEntries.length}`,
         type: 'income' as const,
         category: 'Ordem de Serviço',
         description: `OS ${newOrder.id} - ${newOrder.brand} ${newOrder.model} (${newOrder.clientName})`,
@@ -781,7 +761,7 @@ async function startServer() {
       const commissionAmount = (newOrder.laborCost * rate) / 100;
 
       const commRecord = {
-        id: `COM-${4006 + db.commissions.length}`,
+        id: `COM-${1001 + db.commissions.length}`,
         employeeId: newOrder.assignedTechnicianId,
         employeeName: newOrder.assignedTechnicianName,
         employeeRole: 'technician' as const,
@@ -893,7 +873,7 @@ async function startServer() {
   // Sales Endpoints
   app.post('/api/sales', (req: Request, res: Response) => {
     const saleData = req.body;
-    const nextNum = 2090 + db.sales.length;
+    const nextNum = 1001 + db.sales.length;
     const newId = `VD-${nextNum}`;
     const now = new Date().toISOString();
     const commissionAmount = (saleData.totalAmount * saleData.commissionRate) / 100;
@@ -920,7 +900,7 @@ async function startServer() {
 
     // Register financial entry
     const finEntry = {
-      id: `FIN-${3008 + db.financialEntries.length}`,
+      id: `FIN-${1001 + db.financialEntries.length}`,
       type: 'income' as const,
       category: 'Venda de Balcão',
       description: `Venda ${newSale.id} - ${newSale.items.map((i: any) => i.name).join(', ')} (${newSale.paymentMethod.toUpperCase()})`,
@@ -937,7 +917,7 @@ async function startServer() {
     // Register Commission
     if (newSale.sellerId && commissionAmount > 0) {
       const commRecord = {
-        id: `COM-${4006 + db.commissions.length}`,
+        id: `COM-${1001 + db.commissions.length}`,
         employeeId: newSale.sellerId,
         employeeName: newSale.sellerName,
         employeeRole: 'seller' as const,
