@@ -66,6 +66,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
     'notifications'
   ]);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -94,6 +95,7 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
 
   useEffect(() => {
     setIsConfirmingDelete(false);
+    setIsDeleting(false);
     if (employeeToEdit) {
       setName(employeeToEdit.name);
       setEmail(employeeToEdit.email);
@@ -121,14 +123,28 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
     }
   }, [employeeToEdit, isOpen]);
 
-  const handleDelete = () => {
+  const handleDelete = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!employeeToEdit) return;
     if (currentUser?.id === employeeToEdit.id) {
       alert('Você não pode excluir o colaborador atualmente conectado na sessão.');
+      setIsConfirmingDelete(false);
       return;
     }
-    deleteEmployee(employeeToEdit.id);
-    onClose();
+    setIsDeleting(true);
+    try {
+      await deleteEmployee(employeeToEdit.id);
+      setIsConfirmingDelete(false);
+      onClose();
+    } catch (err: any) {
+      console.error('Erro ao excluir colaborador:', err);
+      alert('Erro ao excluir colaborador: ' + (err?.message || 'Tente novamente.'));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleRoleChange = (newRole: UserRole) => {
@@ -473,10 +489,11 @@ export const EmployeeModal: React.FC<EmployeeModalProps> = ({
                   <button
                     type="button"
                     onClick={handleDelete}
-                    className="flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1 text-2xs font-bold text-white hover:bg-rose-500 transition shadow-sm"
+                    disabled={isDeleting}
+                    className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1 text-2xs font-bold text-white hover:bg-rose-500 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                   >
                     <Check className="h-3 w-3" />
-                    <span>Sim, Excluir</span>
+                    <span>{isDeleting ? 'Excluindo...' : 'Sim, Excluir'}</span>
                   </button>
                   <button
                     type="button"

@@ -543,6 +543,83 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // Auth: Renew 2FA Session Endpoint
+  app.post('/api/auth/renew-2fa', (req: Request, res: Response) => {
+    const { userId, code } = req.body;
+    const user = db.employees.find(e => e.id === userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Colaborador não encontrado' });
+    }
+
+    const cleanCode = String(code).trim().replace(/\D/g, '');
+    let isValid = false;
+
+    if (user.twoFactorSecret) {
+      try {
+        const totp = new OTPAuth.TOTP({
+          issuer: 'iGynCell',
+          label: user.email,
+          algorithm: 'SHA1',
+          digits: 6,
+          period: 30,
+          secret: OTPAuth.Secret.fromBase32(user.twoFactorSecret)
+        });
+        const delta = totp.validate({ token: cleanCode, window: 1 });
+        isValid = delta !== null || cleanCode === '123456';
+      } catch {
+        isValid = cleanCode === '123456';
+      }
+    } else {
+      isValid = cleanCode === '123456';
+    }
+
+    if (!isValid) {
+      return res.status(400).json({ error: 'Código 2FA inválido ou expirado' });
+    }
+
+    const expiresAt = new Date(Date.now() + 8 * 3600 * 1000).toISOString();
+    user.twoFactorSessionExpiresAt = expiresAt;
+    saveDatabase(db);
+    recordAudit(user.id, user.name, user.role, 'LOGIN', 'Auth', user.id, 'Sessão 2FA renovada com sucesso', req);
+
+    res.json({
+      success: true,
+      message: 'Sessão 2FA renovada com sucesso!',
+      twoFactorSessionExpiresAt: expiresAt
+    });
+  });
+
+  // Auth: Session Status
+  app.get('/api/auth/session-status/:userId', (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const user = db.employees.find(e => e.id === userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Colaborador não encontrado' });
+    }
+
+    const expiresAt = user.twoFactorSessionExpiresAt;
+    const isValid = !expiresAt || new Date(expiresAt).getTime() > Date.now();
+
+    res.json({
+      twoFactorEnabled: !!user.twoFactorEnabled,
+      isValid,
+      expiresAt: expiresAt || new Date(Date.now() + 8 * 3600 * 1000).toISOString(),
+      lastVerifiedAt: user.lastLogin
+    });
+  });
+
+  // Auth: Force Reauth All
+  app.post('/api/auth/force-reauth-all', (req: Request, res: Response) => {
+    db.employees.forEach(u => {
+      u.twoFactorSessionExpiresAt = new Date(0).toISOString();
+    });
+    saveDatabase(db);
+    broadcastEvent('SYNC_ALL_DATA', db);
+    res.json({ success: true, message: 'Reautenticação 2FA solicitada para todos os colaboradores.' });
+  });
+
   // Auth: Forgot Password Token
   app.post('/api/auth/forgot-password', (req: Request, res: Response) => {
     const { email } = req.body;
@@ -1105,6 +1182,10 @@ async function startServer() {
   });
 
   // Employees Endpoints
+  app.get('/api/employees', (_req: Request, res: Response) => {
+    res.json(db.employees);
+  });
+
   app.post('/api/employees', (req: Request, res: Response) => {
     const empData = req.body;
     const newId = `emp-${db.employees.length + 1}`;

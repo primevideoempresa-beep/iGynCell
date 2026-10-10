@@ -32,6 +32,9 @@ export interface Employee {
   twoFactorSecret?: string;
   recoveryCodes?: string[];
   twoFactorEnabledAt?: string;
+  twoFactorActivatedAt?: string;
+  twoFactorBackupCodes?: string[];
+  twoFactorSessionExpiresAt?: string;
   failed2FAAttempts?: number;
   failedLoginAttempts?: number;
   lockoutUntil?: string;
@@ -274,4 +277,7 @@ export interface StoreSettings {
   defaultSaleCommission: number;
   defaultTechCommission: number;
   whatsappGreetingTemplate: string;
+  require2FAForAll?: boolean;
+  twoFactorSessionDurationHours?: number;
+  enforce2FABackupCodes?: boolean;
 }

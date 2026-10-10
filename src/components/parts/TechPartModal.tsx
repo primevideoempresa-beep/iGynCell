@@ -57,9 +57,14 @@ export const TechPartModal: React.FC<TechPartModalProps> = ({
     }
   }, [partToEdit, isOpen]);
 
-  const handleDelete = () => {
+  const handleDelete = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!partToEdit) return;
     deleteTechPart(partToEdit.id);
+    setIsConfirmingDelete(false);
     onClose();
   };
 

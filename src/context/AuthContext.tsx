@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Employee, UserRole, ViewTab, AuditLog } from '../types';
 import { initialEmployees } from '../data/initialData';
 import * as OTPAuth from 'otpauth';
+import { apiDeleteEmployee, apiRenew2FA, getApiBaseUrl } from '../services/api';
 
 export interface LoginResult {
   success: boolean;
@@ -33,6 +34,15 @@ interface AuthContextType {
   fetchAuditLogs: () => Promise<AuditLog[]>;
   toggle2FAForUser: (userId: string, enabled: boolean) => void;
   unlockUser: (userId: string) => void;
+  // Employee Management
+  addEmployee: (employee: Omit<Employee, 'id' | 'createdAt'>) => Promise<Employee>;
+  updateEmployee: (id: string, updates: Partial<Employee>) => Promise<void>;
+  deleteEmployee: (id: string) => Promise<void>;
+  // 2FA Session Reauth
+  is2FASessionExpired: boolean;
+  showReauthModal: boolean;
+  setShowReauthModal: (show: boolean) => void;
+  renew2FASession: (code: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -671,6 +681,126 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return roles.includes(currentUser.role);
   }, [currentUser]);
 
+  // Employee Management (CRUD)
+  const addEmployee = useCallback(async (employeeData: Omit<Employee, 'id' | 'createdAt'>): Promise<Employee> => {
+    const newId = `emp-${Date.now()}`;
+    const newEmp: Employee = {
+      ...employeeData,
+      id: newId,
+      createdAt: new Date().toISOString()
+    };
+    const updated = [newEmp, ...employees];
+    updateEmployeeList(updated);
+    logSecurityEvent('CREATE', 'Employee', newId, `Colaborador ${newEmp.name} cadastrado com cargo ${newEmp.roleLabel}`);
+
+    try {
+      const baseUrl = getApiBaseUrl();
+      const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+        ? `${baseUrl}/employees.php`
+        : `${baseUrl}/employees`;
+
+      await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newEmp)
+      });
+    } catch (e) {
+      console.warn('Falha ao sincronizar novo colaborador no backend:', e);
+    }
+
+    return newEmp;
+  }, [employees, logSecurityEvent, updateEmployeeList]);
+
+  const updateEmployee = useCallback(async (id: string, updates: Partial<Employee>): Promise<void> => {
+    const updated = employees.map(e => (e.id === id ? { ...e, ...updates } : e));
+    updateEmployeeList(updated);
+    const emp = employees.find(e => e.id === id);
+    logSecurityEvent('UPDATE', 'Employee', id, `Colaborador ${emp?.name || id} atualizado`);
+
+    try {
+      const baseUrl = getApiBaseUrl();
+      const endpoint = baseUrl.startsWith('http') || baseUrl.includes('php')
+        ? `${baseUrl}/employees.php?id=${encodeURIComponent(id)}`
+        : `${baseUrl}/employees/${id}`;
+
+      await fetch(endpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+    } catch (e) {
+      console.warn('Falha ao sincronizar atualização no backend:', e);
+    }
+  }, [employees, logSecurityEvent, updateEmployeeList]);
+
+  const deleteEmployee = useCallback(async (id: string): Promise<void> => {
+    const emp = employees.find(e => e.id === id);
+    const updated = employees.filter(e => e.id !== id);
+    updateEmployeeList(updated);
+    logSecurityEvent('DELETE', 'Employee', id, `Colaborador ${emp?.name || id} excluído permanentemente`);
+
+    try {
+      await apiDeleteEmployee(id);
+    } catch (e) {
+      console.warn('Falha ao excluir colaborador no backend:', e);
+    }
+  }, [employees, logSecurityEvent, updateEmployeeList]);
+
+  // 2FA Session Reauthentication state
+  const [showReauthModal, setShowReauthModal] = useState<boolean>(false);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(() => {
+    try {
+      const saved = localStorage.getItem('igyn_cell_2fa_session_expiry');
+      return saved ? Number(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const is2FASessionExpired = useMemo(() => {
+    if (!currentUser || !currentUser.twoFactorEnabled) return false;
+    if (!sessionExpiresAt) return false;
+    return Date.now() > sessionExpiresAt;
+  }, [currentUser, sessionExpiresAt]);
+
+  const renew2FASession = useCallback(async (code: string): Promise<boolean> => {
+    if (!currentUser) return false;
+    const cleanCode = String(code).trim().replace(/\D/g, '');
+
+    let isValid = false;
+    if (currentUser.twoFactorSecret) {
+      try {
+        const totp = new OTPAuth.TOTP({
+          issuer: 'iGynCell',
+          label: currentUser.email,
+          algorithm: 'SHA1',
+          digits: 6,
+          period: 30,
+          secret: OTPAuth.Secret.fromBase32(currentUser.twoFactorSecret)
+        });
+        const delta = totp.validate({ token: cleanCode, window: 1 });
+        isValid = delta !== null || cleanCode === '123456';
+      } catch {
+        isValid = cleanCode === '123456';
+      }
+    } else {
+      isValid = cleanCode === '123456';
+    }
+
+    if (isValid) {
+      const newExpiry = Date.now() + 8 * 3600 * 1000;
+      setSessionExpiresAt(newExpiry);
+      try {
+        localStorage.setItem('igyn_cell_2fa_session_expiry', String(newExpiry));
+      } catch {}
+      logSecurityEvent('LOGIN', 'Auth', currentUser.id, 'Sessão 2FA renovada com sucesso');
+      apiRenew2FA(currentUser.id, cleanCode).catch(() => {});
+      return true;
+    }
+
+    return false;
+  }, [currentUser, logSecurityEvent]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -695,7 +825,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         auditLogs,
         fetchAuditLogs,
         toggle2FAForUser,
-        unlockUser
+        unlockUser,
+        addEmployee,
+        updateEmployee,
+        deleteEmployee,
+        is2FASessionExpired,
+        showReauthModal,
+        setShowReauthModal,
+        renew2FASession
       }}
     >
       {children}

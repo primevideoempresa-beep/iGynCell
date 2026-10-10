@@ -48,9 +48,14 @@ export const ClientModal: React.FC<ClientModalProps> = ({
     }
   }, [clientToEdit, isOpen]);
 
-  const handleDelete = () => {
+  const handleDelete = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!clientToEdit) return;
     deleteClient(clientToEdit.id);
+    setIsConfirmingDelete(false);
     onClose();
   };
 
