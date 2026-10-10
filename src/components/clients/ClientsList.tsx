@@ -95,6 +95,19 @@ export const ClientsList: React.FC = () => {
           </p>
         </div>
 
+        <div className="relative flex-grow max-w-xs">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-4 w-4 text-slate-400" />
+          </div>
+          <input
+            type="text"
+            placeholder="Buscar por nome, CPF, telefone..."
+            className="block w-full pl-10 pr-3 py-1.5 border border-slate-700 rounded-lg bg-slate-950 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleExportCSV}
