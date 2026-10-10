@@ -143,8 +143,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
       <div className="space-y-6">
         {/* Brand Header */}
         <div className="flex items-center gap-3 px-2 pt-2">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg overflow-hidden shadow-lg shadow-cyan-950">
-            <img src="/src/assets/images/apple_logo_dark_1791598968887.jpg" alt="Apple Logo" className="w-full h-full object-contain" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg overflow-hidden bg-white shadow-lg shadow-cyan-950">
+            <img src="/src/assets/images/apple_logo_1791598870314.jpg" alt="Apple Logo" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5">
